@@ -447,6 +447,19 @@ public class Main {
             return;
         }
 
+        if (space.isOccupied()) {
+
+            System.out.println(
+                    "\nReservation rejected."
+            );
+
+            System.out.println(
+                    "The selected space is currently occupied."
+            );
+
+            return;
+        }
+
         int startTime =
                 readTime(
                         "Enter Start Time (HH:MM): "
