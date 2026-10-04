@@ -1,9 +1,9 @@
 package model;
 
 public enum ReservationStatus {
-
-    ACTIVE,
+    RESERVED,
     CHECKED_IN,
+    COMPLETED,
     CANCELLED,
     EXPIRED
 }
