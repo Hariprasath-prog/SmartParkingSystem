@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Smart Parking - Console Application",
+            "request": "launch",
+            "mainClass": "main.Main",
+            "projectName": "SmartParkingSystem"
+        },
+        {
+            "type": "java",
+            "name": "Smart Parking - Web & API Server",
+            "request": "launch",
+            "mainClass": "server.SmartParkingServer",
+            "projectName": "SmartParkingSystem"
+        }
+    ]
+}

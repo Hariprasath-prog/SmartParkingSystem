@@ -40,7 +40,7 @@ public class ReservationManager {
      * @param endTime   requested end in minutes
      * @return true if conflict detected, false otherwise
      */
-    public boolean hasOverlappingReservation(String spaceId, int startTime, int endTime) {
+    public synchronized boolean hasOverlappingReservation(String spaceId, int startTime, int endTime) {
         for (Reservation res : reservationHistory) {
             if (res.getSpace().getSpaceId().equalsIgnoreCase(spaceId)) {
                 if (res.overlaps(startTime, endTime)) {
@@ -54,8 +54,8 @@ public class ReservationManager {
     /**
      * Creates and stores a new reservation.
      */
-    public Reservation createReservation(Vehicle vehicle, ParkingSpace space,
-                                         int startTime, int endTime, int currentTime) {
+    public synchronized Reservation createReservation(Vehicle vehicle, ParkingSpace space,
+                                                       int startTime, int endTime, int currentTime) {
         if (hasOverlappingReservation(space.getSpaceId(), startTime, endTime)) {
             throw new IllegalStateException("Space " + space.getSpaceId() +
                     " has an overlapping reservation during " +
@@ -72,7 +72,7 @@ public class ReservationManager {
         return res;
     }
 
-    public Reservation getReservation(String reservationId) {
+    public synchronized Reservation getReservation(String reservationId) {
         if (reservationId == null) {
             return null;
         }
@@ -82,7 +82,7 @@ public class ReservationManager {
     /**
      * Cancels an active reservation, freeing the parking space.
      */
-    public Reservation cancelReservation(String reservationId) {
+    public synchronized Reservation cancelReservation(String reservationId) {
         Reservation res = getReservation(reservationId);
         if (res == null) {
             throw new IllegalArgumentException("Reservation " + reservationId + " not found.");
@@ -94,7 +94,7 @@ public class ReservationManager {
     /**
      * Checks in a vehicle for an active reservation.
      */
-    public Reservation checkIn(String reservationId, int currentTime) {
+    public synchronized Reservation checkIn(String reservationId, int currentTime) {
         Reservation res = getReservation(reservationId);
         if (res == null) {
             throw new IllegalArgumentException("Reservation " + reservationId + " not found.");
@@ -106,7 +106,7 @@ public class ReservationManager {
     /**
      * Checks out a vehicle, completing the reservation and freeing the space.
      */
-    public Reservation checkOut(String reservationId) {
+    public synchronized Reservation checkOut(String reservationId) {
         Reservation res = getReservation(reservationId);
         if (res == null) {
             throw new IllegalArgumentException("Reservation " + reservationId + " not found.");
@@ -117,17 +117,20 @@ public class ReservationManager {
 
     /**
      * Scans all reservations and expires any unfulfilled active reservations
-     * where currentTime > startTime + gracePeriodMinutes.
+     * where currentTime > expiryDeadline.
      *
      * @param currentTime        simulated clock in minutes
      * @param gracePeriodMinutes allowable late check-in grace period
      * @return list of reservations expired in this pass
      */
-    public List<Reservation> processExpiredReservations(int currentTime, int gracePeriodMinutes) {
+    public synchronized List<Reservation> processExpiredReservations(int currentTime, int gracePeriodMinutes) {
         List<Reservation> expiredList = new ArrayList<>();
         for (Reservation res : reservationHistory) {
             if (res.getStatus() == ReservationStatus.RESERVED) {
-                int expiryDeadline = res.getStartTime() + gracePeriodMinutes;
+                int expiryDeadline = res.getExpiryDeadline();
+                if (expiryDeadline <= 0) {
+                    expiryDeadline = res.getStartTime() + gracePeriodMinutes;
+                }
                 if (currentTime > expiryDeadline) {
                     res.expire();
                     expiredList.add(res);
@@ -135,6 +138,23 @@ public class ReservationManager {
             }
         }
         return expiredList;
+    }
+
+    /**
+     * Scans checked-in reservations and flags vehicles that exceeded their booking duration.
+     * Overstaying vehicles remain physically OCCUPIED and do NOT release their stalls.
+     */
+    public synchronized List<Reservation> checkOverstays(int currentTime) {
+        List<Reservation> overstayList = new ArrayList<>();
+        for (Reservation res : reservationHistory) {
+            if (res.getStatus() == ReservationStatus.CHECKED_IN) {
+                if (currentTime > res.getEndTime()) {
+                    res.markOverstay();
+                    overstayList.add(res);
+                }
+            }
+        }
+        return overstayList;
     }
 
     public List<Reservation> getAllReservations() {

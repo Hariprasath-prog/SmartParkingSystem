@@ -12,9 +12,15 @@ public class Reservation {
     private int endTime;   // Minutes from 00:00 (e.g. 660 = 11:00)
     private ReservationStatus status;
     private int createdAt; // Simulated request/booking time
+    private int expiryDeadline; // Exact 20-minute reservation timeout deadline
 
     public Reservation(String reservationId, Vehicle vehicle, ParkingSpace space,
                        int startTime, int endTime, int createdAt) {
+        this(reservationId, vehicle, space, startTime, endTime, createdAt, Math.max(createdAt, startTime) + 20);
+    }
+
+    public Reservation(String reservationId, Vehicle vehicle, ParkingSpace space,
+                       int startTime, int endTime, int createdAt, int expiryDeadline) {
         if (reservationId == null || reservationId.trim().isEmpty()) {
             throw new IllegalArgumentException("Reservation ID cannot be empty.");
         }
@@ -34,6 +40,7 @@ public class Reservation {
         this.startTime = startTime;
         this.endTime = endTime;
         this.createdAt = createdAt;
+        this.expiryDeadline = expiryDeadline;
         this.status = ReservationStatus.RESERVED;
     }
 
@@ -65,12 +72,21 @@ public class Reservation {
         return createdAt;
     }
 
+    public int getExpiryDeadline() {
+        return expiryDeadline;
+    }
+
+    public void setExpiryDeadline(int expiryDeadline) {
+        this.expiryDeadline = expiryDeadline;
+    }
+
     /**
      * Checks if this reservation is currently active (occupying or reserving the time slot).
+     * Overstaying vehicles physically occupy the slot and must block new bookings.
      * Cancelled, expired, or completed reservations do not block time intervals.
      */
     public boolean isActiveSlot() {
-        return status == ReservationStatus.RESERVED || status == ReservationStatus.CHECKED_IN;
+        return status == ReservationStatus.RESERVED || status == ReservationStatus.CHECKED_IN || status == ReservationStatus.OVERSTAY;
     }
 
     /**
@@ -101,15 +117,25 @@ public class Reservation {
     }
 
     /**
-     * Transition: CHECKED_IN -> COMPLETED
+     * Transition: CHECKED_IN or OVERSTAY -> COMPLETED
      */
     public void checkOut() {
-        if (status != ReservationStatus.CHECKED_IN) {
+        if (status != ReservationStatus.CHECKED_IN && status != ReservationStatus.OVERSTAY) {
             throw new IllegalStateException("Cannot check out: reservation " + reservationId +
-                    " status is " + status + " (must be CHECKED_IN).");
+                    " status is " + status + " (must be CHECKED_IN or OVERSTAY).");
         }
         space.checkOut();
         this.status = ReservationStatus.COMPLETED;
+    }
+
+    /**
+     * Transition: CHECKED_IN -> OVERSTAY
+     * Flags vehicle that exceeded expected end time without releasing the occupied stall.
+     */
+    public void markOverstay() {
+        if (status == ReservationStatus.CHECKED_IN) {
+            this.status = ReservationStatus.OVERSTAY;
+        }
     }
 
     /**

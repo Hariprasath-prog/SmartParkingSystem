@@ -37,7 +37,6 @@ public class Main {
 
         System.out.println("====================================================================");
         System.out.println("   SMART PARKING ALLOCATION SYSTEM - IDAM NAGAR COMMERCIAL DISTRICT  ");
-        System.out.println("   Academic Java Mini-Project (OOP, Collections, DSA & Dijkstra)     ");
         System.out.println("====================================================================");
 
         boolean running = true;

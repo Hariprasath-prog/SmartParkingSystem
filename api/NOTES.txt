@@ -1,0 +1,12 @@
+# Smart Parking System — Spring Boot API Layer
+# This file configures Maven to compile BOTH the existing backend source and the new API layer.
+
+# The existing Java source is in: ../src/
+# The Spring Boot API source is in: src/main/java/
+
+# Run with:
+#   cd api
+#   mvn spring-boot:run
+
+# The Maven POM must include the existing src directory as an additional source root.
+# See README.md for complete instructions.

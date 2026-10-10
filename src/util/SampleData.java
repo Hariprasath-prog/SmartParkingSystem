@@ -67,7 +67,7 @@ public class SampleData {
      * Populates 3 lots, 24 spaces, and initial registered vehicles into the controller.
      */
     public static void initializeSystemData(ParkingOperationsController controller) {
-        // Exactly 3 Parking Lots (Section 2, Section 20)
+        // Exactly 3 Parking Lots (Section 2, Section 20) with 20 spaces each (Total 60 spaces)
         ParkingLot lotA = new ParkingLot("LOT-A", "North Gate Plaza", "N6");
         ParkingLot lotB = new ParkingLot("LOT-B", "Central Commercial Lot", "N8");
         ParkingLot lotC = new ParkingLot("LOT-C", "South Metro Terminal", "N9");
@@ -76,35 +76,35 @@ public class SampleData {
         controller.addParkingLot(lotB);
         controller.addParkingLot(lotC);
 
-        // LOT-A (8 spaces): 5 Car, 2 Two-Wheeler, 1 Accessible
-        controller.addParkingSpace(new CarSpace("A-C01", "LOT-A"), "LOT-A");
-        controller.addParkingSpace(new CarSpace("A-C02", "LOT-A"), "LOT-A");
-        controller.addParkingSpace(new CarSpace("A-C03", "LOT-A"), "LOT-A");
-        controller.addParkingSpace(new CarSpace("A-C04", "LOT-A"), "LOT-A");
-        controller.addParkingSpace(new CarSpace("A-C05", "LOT-A"), "LOT-A");
-        controller.addParkingSpace(new TwoWheelerSpace("A-T01", "LOT-A"), "LOT-A");
-        controller.addParkingSpace(new TwoWheelerSpace("A-T02", "LOT-A"), "LOT-A");
+        // LOT-A (20 spaces): 12 Car, 6 Two-Wheeler, 2 Accessible
+        for (int i = 1; i <= 12; i++) {
+            controller.addParkingSpace(new CarSpace(String.format("A-C%02d", i), "LOT-A"), "LOT-A");
+        }
+        for (int i = 1; i <= 6; i++) {
+            controller.addParkingSpace(new TwoWheelerSpace(String.format("A-T%02d", i), "LOT-A"), "LOT-A");
+        }
         controller.addParkingSpace(new AccessibleSpace("A-ACC1", "LOT-A"), "LOT-A");
+        controller.addParkingSpace(new AccessibleSpace("A-ACC2", "LOT-A"), "LOT-A");
 
-        // LOT-B (8 spaces): 4 Car, 3 Two-Wheeler, 1 Accessible
-        controller.addParkingSpace(new CarSpace("B-C01", "LOT-B"), "LOT-B");
-        controller.addParkingSpace(new CarSpace("B-C02", "LOT-B"), "LOT-B");
-        controller.addParkingSpace(new CarSpace("B-C03", "LOT-B"), "LOT-B");
-        controller.addParkingSpace(new CarSpace("B-C04", "LOT-B"), "LOT-B");
-        controller.addParkingSpace(new TwoWheelerSpace("B-T01", "LOT-B"), "LOT-B");
-        controller.addParkingSpace(new TwoWheelerSpace("B-T02", "LOT-B"), "LOT-B");
-        controller.addParkingSpace(new TwoWheelerSpace("B-T03", "LOT-B"), "LOT-B");
+        // LOT-B (20 spaces): 12 Car, 6 Two-Wheeler, 2 Accessible
+        for (int i = 1; i <= 12; i++) {
+            controller.addParkingSpace(new CarSpace(String.format("B-C%02d", i), "LOT-B"), "LOT-B");
+        }
+        for (int i = 1; i <= 6; i++) {
+            controller.addParkingSpace(new TwoWheelerSpace(String.format("B-T%02d", i), "LOT-B"), "LOT-B");
+        }
         controller.addParkingSpace(new AccessibleSpace("B-ACC1", "LOT-B"), "LOT-B");
+        controller.addParkingSpace(new AccessibleSpace("B-ACC2", "LOT-B"), "LOT-B");
 
-        // LOT-C (8 spaces): 4 Car, 3 Two-Wheeler, 1 Accessible
-        controller.addParkingSpace(new CarSpace("C-C01", "LOT-C"), "LOT-C");
-        controller.addParkingSpace(new CarSpace("C-C02", "LOT-C"), "LOT-C");
-        controller.addParkingSpace(new CarSpace("C-C03", "LOT-C"), "LOT-C");
-        controller.addParkingSpace(new CarSpace("C-C04", "LOT-C"), "LOT-C");
-        controller.addParkingSpace(new TwoWheelerSpace("C-T01", "LOT-C"), "LOT-C");
-        controller.addParkingSpace(new TwoWheelerSpace("C-T02", "LOT-C"), "LOT-C");
-        controller.addParkingSpace(new TwoWheelerSpace("C-T03", "LOT-C"), "LOT-C");
+        // LOT-C (20 spaces): 12 Car, 6 Two-Wheeler, 2 Accessible
+        for (int i = 1; i <= 12; i++) {
+            controller.addParkingSpace(new CarSpace(String.format("C-C%02d", i), "LOT-C"), "LOT-C");
+        }
+        for (int i = 1; i <= 6; i++) {
+            controller.addParkingSpace(new TwoWheelerSpace(String.format("C-T%02d", i), "LOT-C"), "LOT-C");
+        }
         controller.addParkingSpace(new AccessibleSpace("C-ACC1", "LOT-C"), "LOT-C");
+        controller.addParkingSpace(new AccessibleSpace("C-ACC2", "LOT-C"), "LOT-C");
 
         // Register sample fleet of vehicles
         controller.registerVehicle(new Vehicle("TN-01-AB-1234", "Anand Kumar", VehicleType.CAR, false));
@@ -236,12 +236,11 @@ public class SampleData {
         System.out.println("Details: Occupying remaining Car spaces in LOT-A to simulate capacity saturation.");
         // Allocate remaining Car spaces in LOT-A
         controller.requestParkingAllocation("TN-01-CD-5678", "N1", 540, 660, 2);
-        controller.registerVehicle(new Vehicle("TN-02-ZZ-0001", "Sim Driver 1", VehicleType.CAR, false));
-        controller.registerVehicle(new Vehicle("TN-02-ZZ-0002", "Sim Driver 2", VehicleType.CAR, false));
-        controller.registerVehicle(new Vehicle("TN-02-ZZ-0003", "Sim Driver 3", VehicleType.CAR, false));
-        controller.requestParkingAllocation("TN-02-ZZ-0001", "N1", 540, 660, 2);
-        controller.requestParkingAllocation("TN-02-ZZ-0002", "N1", 540, 660, 2);
-        controller.requestParkingAllocation("TN-02-ZZ-0003", "N1", 540, 660, 2);
+        for (int i = 1; i <= 10; i++) {
+            String vId = "TN-02-ZZ-" + String.format("%04d", i);
+            controller.registerVehicle(new Vehicle(vId, "Sim Driver " + i, VehicleType.CAR, false));
+            controller.requestParkingAllocation(vId, "N1", 540, 660, 2);
+        }
 
         System.out.println("LOT-A car spaces are now fully booked for 09:00 - 11:00.");
         System.out.println("Driver Priya (TN-01-MN-6789) requests car parking from Node N1.");
@@ -252,8 +251,8 @@ public class SampleData {
         // EVENT 12: Booking second vehicle in LOT-B
         System.out.println("\n--------------------------------------------------------------------------");
         System.out.printf("EVENT %02d: Secondary Lot Consecutive Booking\n", eventNum++);
-        controller.registerVehicle(new Vehicle("TN-02-ZZ-0004", "Sim Driver 4", VehicleType.CAR, false));
-        AllocationResult res12 = controller.requestParkingAllocation("TN-02-ZZ-0004", "N4", 540, 660, 2);
+        controller.registerVehicle(new Vehicle("TN-02-ZZ-0011", "Sim Driver 11", VehicleType.CAR, false));
+        AllocationResult res12 = controller.requestParkingAllocation("TN-02-ZZ-0011", "N4", 540, 660, 2);
         printAllocationResult(res12);
 
         // EVENT 13: Booking two-wheeler in LOT-B
@@ -267,10 +266,13 @@ public class SampleData {
         System.out.printf("EVENT %02d [TEST 7]: Capacity Saturation -> PriorityQueue Waiting List\n", eventNum++);
         System.out.println("Details: Booking all remaining Car spaces across LOT-B and LOT-C.");
         // Saturate remaining car spaces in LOT-B and LOT-C for 09:00-11:00
-        for (int i = 5; i <= 10; i++) {
+        for (int i = 1; i <= 35; i++) {
             String vId = "TN-09-SIM-" + i;
             controller.registerVehicle(new Vehicle(vId, "Bulk Driver " + i, VehicleType.CAR, false));
-            controller.requestParkingAllocation(vId, "N5", 540, 660, 2);
+            AllocationResult bRes = controller.performAllocation(vId, "N5", 540, 660, 2, false);
+            if (!bRes.isSuccess()) {
+                break;
+            }
         }
 
         System.out.println("All Car spaces across LOT-A, LOT-B, and LOT-C are now booked for 09:00 - 11:00.");
@@ -348,8 +350,8 @@ public class SampleData {
         // EVENT 19 [TEST 11]: Expired Reservation Processing
         System.out.println("\n--------------------------------------------------------------------------");
         System.out.printf("EVENT %02d [TEST 11]: Grace Period Expiration (RESERVED -> EXPIRED -> AVAILABLE)\n", eventNum++);
-        System.out.println("Details: Current time is 10:00 (600 mins). Grace period = 15 mins.");
-        System.out.println("Reservations starting at 09:00 (540 mins) with deadline 09:15 that never checked in will expire.");
+        System.out.println("Details: Current time is 10:00 (600 mins). Grace period = 20 mins.");
+        System.out.println("Reservations starting at 09:00 (540 mins) with deadline 09:20 that never checked in will expire.");
         List<Reservation> expiredList = controller.processExpiredReservations(ParkingOperationsController.DEFAULT_GRACE_PERIOD_MINUTES);
         System.out.println("Expired reservations processed: " + expiredList.size());
         for (Reservation exp : expiredList) {

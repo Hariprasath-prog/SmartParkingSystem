@@ -1,0 +1,19 @@
+{
+  "name": "smart-parking-system",
+  "version": "1.0.0",
+  "description": "Smart Parking Allocation System — Idam Nagar Commercial District",
+  "scripts": {
+    "dev": "java -cp bin server.SmartParkingServer",
+    "start": "java -cp bin server.SmartParkingServer",
+    "compile": "powershell -Command \"javac -d bin (Get-ChildItem -Recurse -Filter *.java src | Select-Object -ExpandProperty FullName)\"",
+    "test": "java -cp bin util.SystemTestSuite",
+    "console": "java -cp bin main.Main"
+  },
+  "keywords": [
+    "smart-parking",
+    "dijkstra",
+    "java"
+  ],
+  "author": "",
+  "license": "ISC"
+}

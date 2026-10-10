@@ -23,8 +23,8 @@ import java.util.PriorityQueue;
  */
 public class ParkingOperationsController {
 
-    // Documented configurable grace period for late arrivals
-    public static final int DEFAULT_GRACE_PERIOD_MINUTES = 15;
+    // Documented configurable grace period for late arrivals (20 minutes timeout)
+    public static final int DEFAULT_GRACE_PERIOD_MINUTES = 20;
 
     // Fast O(1) lookup tables (Section 8: HashMap)
     private final Map<String, ParkingLot> lotMap;
@@ -226,18 +226,34 @@ public class ParkingOperationsController {
      *
      * If no compatible space is available across all lots, adds to PriorityQueue waiting list.
      */
-    public AllocationResult requestParkingAllocation(String vehicleId, String originNode,
-                                                     int startTime, int endTime, int accessPriority) {
-        return performAllocation(vehicleId, originNode, startTime, endTime, accessPriority, true);
+    public synchronized AllocationResult requestParkingAllocation(String vehicleId, String originNode,
+                                                                  int startTime, int endTime, int accessPriority) {
+        return performAllocation(vehicleId, originNode, null, -1.0, startTime, endTime, accessPriority, true);
+    }
+
+    public synchronized AllocationResult requestParkingAllocation(String vehicleId, String originNode,
+                                                                  String preferredLotId, double maxDistanceKm,
+                                                                  int startTime, int endTime, int accessPriority) {
+        return performAllocation(vehicleId, originNode, preferredLotId, maxDistanceKm, startTime, endTime, accessPriority, true);
+    }
+
+    public synchronized AllocationResult performAllocation(String vehicleId, String originNode,
+                                                           int startTime, int endTime, int accessPriority,
+                                                           boolean enqueueIfUnavailable) {
+        return performAllocation(vehicleId, originNode, null, -1.0, startTime, endTime, accessPriority, enqueueIfUnavailable);
     }
 
     /**
      * Internal allocation engine.
+     * Evaluates vehicle compatibility, interval overlap, preferred lot preference,
+     * max distance constraint, and Dijkstra shortest path routing.
+     *
      * @param enqueueIfUnavailable if true, adds to waitingQueue when no compatible space is available.
      */
-    public AllocationResult performAllocation(String vehicleId, String originNode,
-                                              int startTime, int endTime, int accessPriority,
-                                              boolean enqueueIfUnavailable) {
+    public synchronized AllocationResult performAllocation(String vehicleId, String originNode,
+                                                           String preferredLotId, double maxDistanceKm,
+                                                           int startTime, int endTime, int accessPriority,
+                                                           boolean enqueueIfUnavailable) {
         // Step 1: Validate and read input
         Vehicle vehicle = getVehicle(vehicleId);
         if (vehicle == null) {
@@ -263,22 +279,14 @@ public class ParkingOperationsController {
                     continue;
                 }
 
-                // Current physical occupancy check if request starts immediately or is active now
-                if (startTime <= currentSimulatedTime && space.isOccupied()) {
+                // Current physical availability check
+                if (!space.isAvailable()) {
                     continue;
                 }
 
                 // Check reservation interval conflicts (newStart < existingEnd && newEnd > existingStart)
                 if (reservationManager.hasOverlappingReservation(space.getSpaceId(), startTime, endTime)) {
                     continue;
-                }
-
-                // If currently reserved by another booking that is not completed
-                if (!space.isAvailable()) {
-                    // Check if existing reservation status truly conflicts
-                    if (reservationManager.hasOverlappingReservation(space.getSpaceId(), startTime, endTime)) {
-                        continue;
-                    }
                 }
 
                 compatibleAndFreeSpaces.add(space);
@@ -302,27 +310,62 @@ public class ParkingOperationsController {
                 return AllocationResult.queued(request,
                         "No compatible parking space available. Added to waiting list (Ranked in PriorityQueue).");
             } else {
-                return AllocationResult.failed("No compatible parking space available.");
+                return AllocationResult.failed("No compatible parking space available across all facilities.");
             }
         }
 
         // Step 5: Run Dijkstra's algorithm to calculate travel time to eligible lots
         Map<String, ShortestPathResult> shortestPaths = DijkstraAlgorithm.computeAllShortestPaths(roadNetwork, origin);
 
-        // Step 6: Select the nearest reachable eligible lot
+        // Filter by max distance if requested
+        if (maxDistanceKm > 0) {
+            Map<ParkingLot, List<ParkingSpace>> filteredLots = new HashMap<>();
+            for (Map.Entry<ParkingLot, List<ParkingSpace>> entry : eligibleLotSpaces.entrySet()) {
+                ShortestPathResult r = shortestPaths.get(entry.getKey().getLocationNode());
+                if (r != null && r.isReachable()) {
+                    double dist = Math.round(r.getTravelTimeMinutes() * 0.35 * 10.0) / 10.0;
+                    if (dist <= maxDistanceKm) {
+                        filteredLots.put(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+            if (!filteredLots.isEmpty()) {
+                eligibleLotSpaces = filteredLots;
+            }
+        }
+
+        // Step 6: Select the best lot (Check Preferred Area first, otherwise nearest reachable via Dijkstra)
         ParkingLot bestLot = null;
         int minTravelTime = Integer.MAX_VALUE;
         ShortestPathResult bestRoute = null;
+        boolean preferredSelected = false;
 
-        for (ParkingLot lot : eligibleLotSpaces.keySet()) {
-            String lotNode = lot.getLocationNode();
-            ShortestPathResult routeResult = shortestPaths.get(lotNode);
-
-            if (routeResult != null && routeResult.isReachable()) {
-                if (routeResult.getTravelTimeMinutes() < minTravelTime) {
-                    minTravelTime = routeResult.getTravelTimeMinutes();
+        // Check if preferred lot has available compatible spaces
+        if (preferredLotId != null && !preferredLotId.trim().isEmpty()) {
+            String pId = preferredLotId.trim().toUpperCase();
+            for (ParkingLot lot : eligibleLotSpaces.keySet()) {
+                if (lot.getLotId().equalsIgnoreCase(pId)) {
                     bestLot = lot;
-                    bestRoute = routeResult;
+                    bestRoute = shortestPaths.get(lot.getLocationNode());
+                    minTravelTime = (bestRoute != null && bestRoute.isReachable()) ? bestRoute.getTravelTimeMinutes() : 0;
+                    preferredSelected = true;
+                    break;
+                }
+            }
+        }
+
+        // If no preferred lot requested or preferred lot was full, pick nearest reachable eligible lot
+        if (bestLot == null) {
+            for (ParkingLot lot : eligibleLotSpaces.keySet()) {
+                String lotNode = lot.getLocationNode();
+                ShortestPathResult routeResult = shortestPaths.get(lotNode);
+
+                if (routeResult != null && routeResult.isReachable()) {
+                    if (routeResult.getTravelTimeMinutes() < minTravelTime) {
+                        minTravelTime = routeResult.getTravelTimeMinutes();
+                        bestLot = lot;
+                        bestRoute = routeResult;
+                    }
                 }
             }
         }
@@ -331,7 +374,7 @@ public class ParkingOperationsController {
             return AllocationResult.failed("None of the eligible parking lots are reachable from node " + origin + ".");
         }
 
-        // Step 7: Within that nearest lot, select best compatible space
+        // Step 7: Within that selected lot, select best compatible space
         List<ParkingSpace> candidateSpaces = eligibleLotSpaces.get(bestLot);
         ParkingSpace selectedSpace = slotPolicy.selectBestSpace(candidateSpaces, vehicle);
         if (selectedSpace == null) {
@@ -344,14 +387,18 @@ public class ParkingOperationsController {
 
         // Step 9: Return confirmation
         String routeString = (bestRoute != null) ? bestRoute.getPathString() : "[Direct]";
-        return AllocationResult.successful(reservation, bestLot, selectedSpace, minTravelTime, routeString);
+        String message = (preferredLotId != null && !preferredLotId.trim().isEmpty() && !preferredSelected)
+                ? "Preferred facility " + preferredLotId + " is unavailable. Allocated nearest alternative: " + bestLot.getLotId()
+                : "Reservation successfully confirmed.";
+
+        return new AllocationResult(true, message, reservation, bestLot, selectedSpace, minTravelTime, routeString, null);
     }
 
     // =========================================================================
     // CHECK-IN WORKFLOW (Section 11)
     // =========================================================================
 
-    public Reservation checkIn(String reservationId, String vehicleId) {
+    public synchronized Reservation checkIn(String reservationId, String vehicleId) {
         Reservation res = reservationManager.getReservation(reservationId);
         if (res == null) {
             throw new IllegalArgumentException("Reservation " + reservationId + " does not exist.");
@@ -387,13 +434,13 @@ public class ParkingOperationsController {
     // CHECK-OUT WORKFLOW (Section 12)
     // =========================================================================
 
-    public Reservation checkOut(String reservationId) {
+    public synchronized Reservation checkOut(String reservationId) {
         Reservation res = reservationManager.getReservation(reservationId);
         if (res == null) {
             throw new IllegalArgumentException("Reservation " + reservationId + " does not exist.");
         }
 
-        // Transition CHECKED_IN -> COMPLETED; space -> AVAILABLE
+        // Transition CHECKED_IN or OVERSTAY -> COMPLETED; space -> AVAILABLE
         res.checkOut();
 
         // Immediately trigger waiting-list reconsideration
@@ -405,7 +452,7 @@ public class ParkingOperationsController {
     // CANCELLATION WORKFLOW (Section 13)
     // =========================================================================
 
-    public Reservation cancelReservation(String reservationId) {
+    public synchronized Reservation cancelReservation(String reservationId) {
         Reservation res = reservationManager.getReservation(reservationId);
         if (res == null) {
             throw new IllegalArgumentException("Reservation " + reservationId + " does not exist.");
@@ -423,7 +470,7 @@ public class ParkingOperationsController {
     // EXPIRED RESERVATIONS WORKFLOW (Section 14)
     // =========================================================================
 
-    public List<Reservation> processExpiredReservations(int gracePeriodMinutes) {
+    public synchronized List<Reservation> processExpiredReservations(int gracePeriodMinutes) {
         List<Reservation> expired = reservationManager.processExpiredReservations(
                 currentSimulatedTime, gracePeriodMinutes);
 
@@ -431,6 +478,14 @@ public class ParkingOperationsController {
             reconsiderWaitingList();
         }
         return expired;
+    }
+
+    // =========================================================================
+    // OVERSTAY WORKFLOW (TEST 4)
+    // =========================================================================
+
+    public synchronized List<Reservation> checkOverstays() {
+        return reservationManager.checkOverstays(currentSimulatedTime);
     }
 
     // =========================================================================
@@ -515,6 +570,91 @@ public class ParkingOperationsController {
 
     public List<Reservation> getAllReservations() {
         return reservationManager.getAllReservations();
+    }
+
+    // ==========================================
+    // NEARBY PARKING SUGGESTIONS (DIJKSTRA)
+    // ==========================================
+
+    public static class NearbyLotSuggestion {
+        private final String lotId;
+        private final String lotName;
+        private final String locationNode;
+        private final int travelTimeMinutes;
+        private final double distanceKm;
+        private final String travelRoute;
+        private final int availableSpaces;
+        private final String sampleSpaceId;
+
+        public NearbyLotSuggestion(String lotId, String lotName, String locationNode,
+                                   int travelTimeMinutes, double distanceKm, String travelRoute,
+                                   int availableSpaces, String sampleSpaceId) {
+            this.lotId = lotId;
+            this.lotName = lotName;
+            this.locationNode = locationNode;
+            this.travelTimeMinutes = travelTimeMinutes;
+            this.distanceKm = distanceKm;
+            this.travelRoute = travelRoute;
+            this.availableSpaces = availableSpaces;
+            this.sampleSpaceId = sampleSpaceId;
+        }
+
+        public String getLotId() { return lotId; }
+        public String getLotName() { return lotName; }
+        public String getLocationNode() { return locationNode; }
+        public int getTravelTimeMinutes() { return travelTimeMinutes; }
+        public double getDistanceKm() { return distanceKm; }
+        public String getTravelRoute() { return travelRoute; }
+        public int getAvailableSpaces() { return availableSpaces; }
+        public String getSampleSpaceId() { return sampleSpaceId; }
+    }
+
+    /**
+     * Evaluates all parking lots from an origin node using Dijkstra shortest paths
+     * and returns available capacity, timing, and travel route recommendations.
+     */
+    public List<NearbyLotSuggestion> getNearbyLotSuggestions(String originNode, Vehicle vehicle, int startTime, int endTime) {
+        String origin = (originNode != null && roadNetwork.hasNode(originNode.trim().toUpperCase()))
+                ? originNode.trim().toUpperCase() : "N1";
+
+        Map<String, DijkstraAlgorithm.ShortestPathResult> shortestPaths =
+                DijkstraAlgorithm.computeAllShortestPaths(roadNetwork, origin);
+
+        List<NearbyLotSuggestion> suggestions = new ArrayList<>();
+
+        for (ParkingLot lot : lotMap.values()) {
+            DijkstraAlgorithm.ShortestPathResult routeResult = shortestPaths.get(lot.getLocationNode());
+            int travelTime = (routeResult != null && routeResult.isReachable()) ? routeResult.getTravelTimeMinutes() : 999;
+            String routeStr = (routeResult != null && routeResult.isReachable()) ? routeResult.getPathString() : "[No route]";
+            double distKm = Math.round(travelTime * 0.35 * 10.0) / 10.0; // Approx 0.35 km per minute in urban grid
+
+            int availCount = 0;
+            String sampleSpace = null;
+            for (ParkingSpace space : lot.getSpaces()) {
+                if (vehicle != null && !slotPolicy.isCompatible(space, vehicle)) {
+                    continue;
+                }
+                if (!space.isAvailable()) {
+                    continue;
+                }
+                if (reservationManager.hasOverlappingReservation(space.getSpaceId(), startTime, endTime)) {
+                    continue;
+                }
+                availCount++;
+                if (sampleSpace == null) {
+                    sampleSpace = space.getSpaceId();
+                }
+            }
+
+            suggestions.add(new NearbyLotSuggestion(
+                    lot.getLotId(), lot.getLotName(), lot.getLocationNode(),
+                    travelTime, distKm, routeStr, availCount, sampleSpace
+            ));
+        }
+
+        // Sort by shortest travel time (Dijkstra)
+        suggestions.sort((a, b) -> Integer.compare(a.getTravelTimeMinutes(), b.getTravelTimeMinutes()));
+        return suggestions;
     }
 
     public List<ParkingRequest> getWaitingRequests() {
