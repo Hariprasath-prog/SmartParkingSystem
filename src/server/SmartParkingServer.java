@@ -65,7 +65,7 @@ public class SmartParkingServer {
         // Static Frontend Handler
         server.createContext("/", new StaticFileHandler());
 
-        server.setExecutor(null); // default executor
+        server.setExecutor(Executors.newFixedThreadPool(8)); // Multi-threaded executor for fast responsive processing
         server.start();
 
         // 4. Background Server-Side 20-Minute Expiration & Overstay Poller (Section 4)
@@ -146,6 +146,12 @@ public class SmartParkingServer {
                 } else if (path.matches("/api/bookings/.+/checkin") && "POST".equals(method)) {
                     String resId = extractMiddlePath(path, "/api/bookings/", "/checkin");
                     handleCheckIn(exchange, resId);
+                } else if (path.matches("/api/bookings/.+/space") && ("PUT".equals(method) || "POST".equals(method))) {
+                    String resId = extractMiddlePath(path, "/api/bookings/", "/space");
+                    handleUpdateBookingSpace(exchange, resId);
+                } else if (path.matches("/api/bookings/.+/update-space") && "POST".equals(method)) {
+                    String resId = extractMiddlePath(path, "/api/bookings/", "/update-space");
+                    handleUpdateBookingSpace(exchange, resId);
                 } else if (path.matches("/api/bookings/.+/checkout") && "POST".equals(method)) {
                     String resId = extractMiddlePath(path, "/api/bookings/", "/checkout");
                     handleCheckOut(exchange, resId);
@@ -398,6 +404,8 @@ public class SmartParkingServer {
             VehicleType type = "TWO_WHEELER".equalsIgnoreCase(vehicleType) ? VehicleType.TWO_WHEELER : VehicleType.CAR;
             v = new Vehicle(vehicleId, ownerName != null ? ownerName.trim() : "", type, accessiblePermit);
             controller.registerVehicle(v);
+        } else if (ownerName != null && !ownerName.trim().isEmpty()) {
+            v.setOwnerName(ownerName.trim());
         }
 
         AllocationResult result = controller.requestParkingAllocation(
@@ -479,6 +487,22 @@ public class SmartParkingServer {
 
         try {
             Reservation r = controller.checkIn(reservationId, vehicleId);
+            sendJsonResponse(exchange, 200, reservationToJson(r));
+        } catch (Exception e) {
+            sendJsonResponse(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
+        }
+    }
+
+    private static void handleUpdateBookingSpace(HttpExchange exchange, String reservationId) throws IOException {
+        String body = readRequestBody(exchange);
+        Map<String, String> map = parseSimpleJson(body);
+        String spaceId = map.get("spaceId");
+        if (spaceId == null || spaceId.trim().isEmpty()) {
+            spaceId = map.get("newSpaceId");
+        }
+
+        try {
+            Reservation r = controller.updateParkingSpace(reservationId, spaceId);
             sendJsonResponse(exchange, 200, reservationToJson(r));
         } catch (Exception e) {
             sendJsonResponse(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
@@ -711,6 +735,8 @@ public class SmartParkingServer {
 
     private static String reservationToJson(Reservation r) {
         return "{" +
+                "\"success\":true," +
+                "\"message\":\"Operation completed successfully.\"," +
                 "\"reservationId\":\"" + r.getReservationId() + "\"," +
                 "\"vehicleId\":\"" + r.getVehicle().getVehicleId() + "\"," +
                 "\"ownerName\":\"" + escapeJson(r.getVehicle().getOwnerName()) + "\"," +

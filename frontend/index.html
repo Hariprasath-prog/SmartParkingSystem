@@ -97,7 +97,20 @@
         </nav>
 
         <!-- Sidebar Footer: Simulated Time Display -->
+        <!-- Sidebar Footer: Current Time & Simulated Time Display -->
         <div class="sidebar-footer">
+            <div class="current-time-sidebar-badge" style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid rgba(255,255,255,0.07)">
+                <div class="sim-clock-icon" style="background: rgba(16, 185, 129, 0.15)">
+                    <svg viewBox="0 0 24 24" style="stroke:#10b981;width:16px;height:16px;fill:none;stroke-width:2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="sim-time-label" style="color:#34d399">Live Current Time</div>
+                    <div class="sim-time-value" id="sidebar-current-time" style="font-size:0.92rem;color:#ecfdf5">--:--:--</div>
+                </div>
+            </div>
             <div class="sim-time-badge">
                 <div class="sim-clock-icon">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -130,6 +143,16 @@
                 <div class="header-breadcrumb">
                     <h1 id="page-title">Live Dashboard</h1>
                     <p id="page-subtitle">Idam Nagar Commercial District Transit Authority</p>
+                </div>
+            </div>
+
+            <!-- Prominent Live Current Time Display in Header -->
+            <div class="current-time-header-widget" id="header-current-time-widget" title="Live Current Time">
+                <div class="current-time-pulse-indicator" aria-hidden="true"></div>
+                <div class="current-time-text-wrap">
+                    <div class="current-time-subtext">CURRENT TIME</div>
+                    <div class="current-time-digits" id="live-current-time">--:--:-- --</div>
+                    <div class="current-time-date" id="live-current-date">---, -- --- ----</div>
                 </div>
             </div>
 
@@ -221,6 +244,23 @@
             </button>
         </div>
         <div class="modal-body" id="space-modal-body"></div>
+    </div>
+</div>
+
+<!-- Update Parking Space Modal -->
+<div class="modal-overlay" id="update-space-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title" id="update-space-modal-title">Update Parking Space</div>
+            <button class="modal-close" onclick="closeModal('update-space-modal')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body" id="update-space-modal-body"></div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('update-space-modal')">Cancel</button>
+            <button class="btn btn-primary" id="update-space-modal-confirm">Confirm Space Update</button>
+        </div>
     </div>
 </div>
 

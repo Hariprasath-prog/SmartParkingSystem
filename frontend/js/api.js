@@ -193,6 +193,15 @@ const API = {
     }),
 
     /**
+     * PUT /api/bookings/:reservationId/space
+     * Reassigns / updates the allocated parking space.
+     */
+    updateBookingSpace: (reservationId, spaceId) => apiFetch(`/bookings/${encodeURIComponent(reservationId)}/space`, {
+        method: 'PUT',
+        body: JSON.stringify({ spaceId }),
+    }),
+
+    /**
      * POST /api/bookings/:reservationId/checkout
      */
     checkOut: (reservationId) => apiFetch(`/bookings/${encodeURIComponent(reservationId)}/checkout`, {

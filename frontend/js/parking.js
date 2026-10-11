@@ -82,20 +82,20 @@ function renderFindParkingForm(simMinutes) {
                 </div>
                 <div class="card-body">
 
-                    <!-- 20-Minute Hold Policy Notice -->
+                    <!-- 20-Minute Arrival Check-In Rule -->
                     <div class="timeout-notice-box">
                         <div class="timeout-notice-icon">
                             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         </div>
                         <div class="timeout-notice-content">
-                            <h4>20-Minute Arrival Hold Rule</h4>
-                            <p>Allocated reservations are reserved for <strong>20 minutes</strong> from arrival time. Check in at the entrance gate within 20 mins to secure your bay; otherwise, the system automatically times out the hold and reallocates the space to waiting drivers.</p>
+                            <h4>20-Minute Arrival Check-In Rule</h4>
+                            <p><strong>Early Arrival Supported:</strong> Drivers can arrive up to <strong>20 minutes before</strong> their scheduled start time (or within the 20-minute reservation hold window) to check in at the entrance gate and update the parking space to <strong>OCCUPIED</strong>. You may also reassign or update your parking stall anytime.</p>
                         </div>
                     </div>
 
                     <form id="find-parking-form" novalidate>
 
-                        <!-- Vehicle Registration -->
+                        <!-- Vehicle Registration Number -->
                         <div class="form-group">
                             <label class="form-label" for="fp-vehicle-id">
                                 Vehicle Registration Number <span class="required">*</span>
@@ -107,11 +107,14 @@ function renderFindParkingForm(simMinutes) {
                             <div class="form-error" id="fp-vehicle-id-error">Please enter a valid vehicle registration plate.</div>
                         </div>
 
-                        <!-- Driver Name -->
+                        <!-- Owner's Name -->
                         <div class="form-group">
-                            <label class="form-label" for="fp-owner-name">Driver / Owner Name</label>
+                            <label class="form-label" for="fp-owner-name">
+                                Owner's Name <span class="required">*</span>
+                            </label>
                             <input type="text" id="fp-owner-name" class="form-control"
-                                placeholder="e.g. Anand Kumar" value="Anand Kumar" />
+                                placeholder="e.g. Anand Kumar" value="Anand Kumar" required />
+                            <div class="form-error" id="fp-owner-name-error">Please enter the owner's name.</div>
                         </div>
 
                         <!-- Vehicle Type & Origin Location Row -->
@@ -178,9 +181,17 @@ function renderFindParkingForm(simMinutes) {
                         </div>
 
                         <!-- Parking Date & Time Controls (Section 5 Required Format) -->
+                        <!-- Parking Date & Time Controls -->
                         <div class="card mb-4" style="background:var(--bg-muted); border:1px solid var(--border-light); padding:1rem">
-                            <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:0.75rem; letter-spacing:0.05em">
-                                Parking Interval Schedule
+                            <div class="d-flex align-center justify-between mb-3" style="flex-wrap:wrap; gap:8px">
+                                <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em">
+                                    Parking Interval Schedule
+                                </div>
+                                <div class="d-flex align-center gap-2" style="background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:4px; padding:3px 9px">
+                                    <div class="current-time-pulse-indicator" style="width:7px;height:7px"></div>
+                                    <span style="font-size:0.7rem;font-weight:700;color:#065f46">CURRENT TIME:</span>
+                                    <span class="text-mono" id="find-parking-current-time" style="font-size:0.75rem;font-weight:700;color:#065f46">--:--:--</span>
+                                </div>
                             </div>
 
                             <!-- Parking From: Date + Time -->
@@ -225,13 +236,17 @@ function renderFindParkingForm(simMinutes) {
                                 </div>
                             </div>
 
-                            <!-- Quick Preset Duration Pills -->
-                            <div class="duration-pills mt-3">
+                            <!-- Quick Preset Duration Pills + Sync Current Time Button -->
+                            <div class="duration-pills mt-3" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px">
                                 <span style="font-size:0.72rem; color:var(--text-muted); align-self:center; font-weight:600">Quick Duration:</span>
                                 <button type="button" class="duration-pill" onclick="setDurationPreset(30)">+30m</button>
                                 <button type="button" class="duration-pill" onclick="setDurationPreset(60)">+1 hr</button>
                                 <button type="button" class="duration-pill active" onclick="setDurationPreset(120)">+2 hrs</button>
                                 <button type="button" class="duration-pill" onclick="setDurationPreset(240)">+4 hrs</button>
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="syncBookingWithCurrentTime()" style="margin-left:auto;font-size:0.72rem;padding:3px 9px;border:1px solid var(--border-medium);background:#fff">
+                                    <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    Book From Current Time
+                                </button>
                             </div>
                         </div>
 
@@ -328,6 +343,13 @@ async function handleFindParkingSubmit() {
     if (!vehicleId || vehicleId.length < 3) {
         document.getElementById('fp-vehicle-id')?.classList.add('error');
         const err = document.getElementById('fp-vehicle-id-error');
+        if (err) err.style.display = 'block';
+        valid = false;
+    }
+
+    if (!ownerName || ownerName.length < 2) {
+        document.getElementById('fp-owner-name')?.classList.add('error');
+        const err = document.getElementById('fp-owner-name-error');
         if (err) err.style.display = 'block';
         valid = false;
     }
@@ -481,11 +503,15 @@ function renderBookingResult(result, startMins, endMins, originNode) {
                         </tr>
                     </table>
 
-                    <!-- Immediate Gate Verification Action -->
-                    <div class="d-flex gap-2 mt-4">
-                        <button class="btn btn-primary btn-block" onclick="quickVerifyCheckIn('${escapeHtml(result.reservationId)}', '${escapeHtml(result.vehicleId)}')">
+                    <!-- Immediate Gate Verification & Update Space Actions -->
+                    <div class="d-flex gap-2 mt-4" style="flex-wrap:wrap">
+                        <button class="btn btn-primary" id="btn-pass-checkin" style="flex:1" onclick="quickVerifyCheckIn('${escapeHtml(result.reservationId)}', '${escapeHtml(result.vehicleId)}')">
                             <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-                            Confirm Gate Check-In (Arrival)
+                            Confirm Gate Check-In (Arrival &amp; Update Space)
+                        </button>
+                        <button class="btn btn-secondary" onclick="openUpdateSpaceModal('${escapeHtml(result.reservationId)}', '${escapeHtml(result.spaceId)}')">
+                            <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                            Update Parking Space
                         </button>
                     </div>
 
@@ -612,11 +638,142 @@ function startLive20MinHoldTimer(totalSeconds, resId) {
 
 async function quickVerifyCheckIn(resId, vehicleId) {
     try {
-        await API.checkIn(resId, vehicleId);
-        showToast('success', 'Checked In!', `Arrival verified at gate. Barrier gate opened.`);
-        navigateTo('bookings');
+        const res = await API.checkIn(resId, vehicleId);
+        showToast('success', 'Arrival Verified!', `Gate check-in completed. Space ${res.spaceId || ''} updated to OCCUPIED.`);
+        
+        // Update live pass UI in place
+        const passPill = document.querySelector('.pass-status-pill');
+        if (passPill) {
+            passPill.innerHTML = `<span style="display:inline-block;width:6px;height:6px;background:#10b981;border-radius:50%"></span> CHECKED IN (OCCUPIED)`;
+            passPill.style.color = '#065f46';
+            passPill.style.borderColor = '#a7f3d0';
+            passPill.style.background = '#ecfdf5';
+        }
+        const timerBanner = document.querySelector('.pass-timer-banner');
+        if (timerBanner) {
+            timerBanner.style.background = '#ecfdf5';
+            timerBanner.style.borderColor = '#a7f3d0';
+            timerBanner.innerHTML = `
+                <div class="d-flex align-center gap-2">
+                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:#059669;fill:none;stroke-width:2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span style="font-weight:700;color:#065f46;font-size:0.85rem">Gate Check-In Verified: Stall ${res.spaceId || ''} is now OCCUPIED.</span>
+                </div>
+            `;
+        }
+        const checkinBtn = document.getElementById('btn-pass-checkin');
+        if (checkinBtn) {
+            checkinBtn.disabled = true;
+            checkinBtn.innerHTML = `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Check-In Completed (Occupied)`;
+            checkinBtn.classList.remove('btn-primary');
+            checkinBtn.classList.add('btn-ghost');
+        }
+        if (bookingHoldTimerId) {
+            clearInterval(bookingHoldTimerId);
+            bookingHoldTimerId = null;
+        }
     } catch (err) {
-        showToast('error', 'Check-In Error', err.message);
+        showToast('error', 'Check-In Notice', err.message);
+    }
+}
+
+function syncBookingWithCurrentTime() {
+    const startInput = document.getElementById('fp-start-time');
+    const startDateInput = document.getElementById('fp-start-date');
+    if (!startInput || !startDateInput) return;
+    
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    startDateInput.value = `${y}-${m}-${d}`;
+    
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    startInput.value = `${hours}:${minutes}`;
+    
+    setDurationPreset(120); // 2 hours preset
+    showToast('info', 'Synchronized with Current Time', `Schedule set starting at current time (${hours}:${minutes}).`);
+}
+
+async function openUpdateSpaceModal(reservationId, currentSpaceId) {
+    try {
+        const spaces = await API.getSpaces();
+        const modal = document.getElementById('update-space-modal');
+        const body = document.getElementById('update-space-modal-body');
+        const confirmBtn = document.getElementById('update-space-modal-confirm');
+        if (!modal || !body || !confirmBtn) return;
+
+        const availableSpaces = spaces.filter(s => s.status === 'AVAILABLE' || s.spaceId === currentSpaceId);
+
+        let spaceOptions = availableSpaces.map(s => `
+            <option value="${escapeHtml(s.spaceId)}" ${s.spaceId === currentSpaceId ? 'selected disabled' : ''}>
+                ${escapeHtml(s.spaceId)} [${escapeHtml(s.lotId)}] — ${escapeHtml(s.type)} ${s.spaceId === currentSpaceId ? '(CURRENTLY ALLOCATED)' : '(AVAILABLE)'}
+            </option>
+        `).join('');
+
+        body.innerHTML = `
+            <div class="mb-3">
+                <p style="font-size:0.88rem;color:var(--text-body)">
+                    Select a new available stall to reassign for reservation <code class="text-mono">${escapeHtml(reservationId)}</code>.
+                </p>
+                <div style="background:var(--bg-muted);border:1px solid var(--border-light);border-radius:6px;padding:8px 12px;margin:10px 0;font-size:0.82rem">
+                    Current Assigned Bay: <strong class="text-mono" style="color:var(--color-brand-accent)">${escapeHtml(currentSpaceId)}</strong>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="new-space-select">Choose New Parking Space <span class="required">*</span></label>
+                <select id="new-space-select" class="form-control" style="font-weight:600">
+                    ${spaceOptions}
+                </select>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">
+                    Updating space frees the previous stall and marks the new stall as RESERVED / OCCUPIED.
+                </div>
+            </div>
+            <div id="update-space-modal-error"></div>
+        `;
+
+        confirmBtn.onclick = async () => {
+            const select = document.getElementById('new-space-select');
+            const newSpaceId = select?.value;
+            if (!newSpaceId || newSpaceId === currentSpaceId) {
+                showToast('warning', 'Selection Required', 'Please choose a different available space.');
+                return;
+            }
+
+            setButtonLoading(confirmBtn, true);
+            try {
+                const res = await API.updateBookingSpace(reservationId, newSpaceId);
+                showToast('success', 'Space Updated!', `Reservation updated to stall ${newSpaceId}.`);
+                closeModal('update-space-modal');
+
+                // If on Find Parking, update pass display
+                const passBay = document.querySelector('.pass-bay-value');
+                if (passBay) passBay.textContent = newSpaceId;
+
+                // Fast reload active page if bookings
+                if (currentPage === 'bookings') {
+                    if (window.refreshBookingsData) {
+                        await window.refreshBookingsData();
+                    } else {
+                        await loadBookings();
+                    }
+                } else if (currentPage === 'parking-layout') {
+                    await loadParkingLayout();
+                }
+            } catch (err) {
+                showToast('error', 'Update Failed', err.message);
+                const errEl = document.getElementById('update-space-modal-error');
+                if (errEl) {
+                    errEl.innerHTML = `<div class="alert alert-error mt-2"><div>${escapeHtml(err.message)}</div></div>`;
+                }
+            } finally {
+                setButtonLoading(confirmBtn, false);
+            }
+        };
+
+        openModal('update-space-modal');
+    } catch (err) {
+        showToast('error', 'Load Spaces Error', err.message);
     }
 }
 
@@ -847,3 +1004,16 @@ function getSpaceTypeIconSvg(type) {
             return `<svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2" aria-label="Car"><rect x="3" y="11" width="18" height="7" rx="2"/><path d="M5 11l2-5h10l2 5"/><circle cx="7.5" cy="18" r="1.5"/><circle cx="16.5" cy="18" r="1.5"/></svg>`;
     }
 }
+
+// Global exports for inline HTML handlers
+window.loadFindParking = loadFindParking;
+window.loadParkingLayout = loadParkingLayout;
+window.setDurationPreset = setDurationPreset;
+window.syncBookingWithCurrentTime = syncBookingWithCurrentTime;
+window.openUpdateSpaceModal = openUpdateSpaceModal;
+window.quickVerifyCheckIn = quickVerifyCheckIn;
+window.quickBookAlternativeLot = quickBookAlternativeLot;
+window.filterLayoutByFacility = filterLayoutByFacility;
+window.filterLayoutByType = filterLayoutByType;
+window.filterLayoutByStatus = filterLayoutByStatus;
+window.openSpaceDetailModal = openSpaceDetailModal;

@@ -11,11 +11,13 @@ let activeBookingFilter = 'ALL';
 let allBookings = [];
 let currentSimTime = 480;
 
-async function loadBookings() {
+async function loadBookings(silent = false) {
     const container = document.getElementById('bookings-content');
     if (!container) return;
 
-    container.innerHTML = `<div class="loading-spinner"><div class="spinner"></div></div>`;
+    if (!silent && !document.getElementById('bookings-list')) {
+        container.innerHTML = `<div class="loading-spinner"><div class="spinner"></div></div>`;
+    }
     clearCountdownIntervals();
 
     try {
@@ -25,10 +27,21 @@ async function loadBookings() {
         ]);
         allBookings = reservations;
         currentSimTime = timeData.simulatedTime || 480;
-        renderBookingsPage();
+
+        const listEl = document.getElementById('bookings-list');
+        if (listEl && silent) {
+            updateFilterTabsUI();
+            filterBookingsDisplay();
+        } else {
+            renderBookingsPage();
+        }
     } catch (err) {
         renderApiError('bookings-content', err);
     }
+}
+
+async function refreshBookingsData() {
+    return loadBookings(true);
 }
 
 function renderBookingsPage() {
@@ -88,23 +101,6 @@ function renderBookingsPage() {
         <div id="bookings-list">
             ${renderBookingsList(allBookings)}
         </div>
-
-        <!-- Confirm Action Modal -->
-        <div class="modal-overlay" id="booking-action-modal">
-            <div class="modal">
-                <div class="modal-header">
-                    <div class="modal-title" id="action-modal-title">Confirm Action</div>
-                    <button class="modal-close" onclick="closeModal('booking-action-modal')">
-                        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <div class="modal-body" id="action-modal-body"></div>
-                <div class="modal-footer">
-                    <button class="btn btn-ghost" onclick="closeModal('booking-action-modal')">Cancel</button>
-                    <button class="btn btn-primary" id="action-modal-confirm">Confirm</button>
-                </div>
-            </div>
-        </div>
     `;
 
     // Start countdown timers for active reservations
@@ -113,8 +109,41 @@ function renderBookingsPage() {
 
 function setBookingFilter(status) {
     activeBookingFilter = status;
-    // Re-render
-    renderBookingsPage();
+    updateFilterTabsUI();
+    filterBookingsDisplay();
+}
+
+function updateFilterTabsUI() {
+    const counts = {
+        ALL:        allBookings.length,
+        RESERVED:   allBookings.filter(r => r.status === 'RESERVED').length,
+        CHECKED_IN: allBookings.filter(r => r.status === 'CHECKED_IN').length,
+        OVERSTAY:   allBookings.filter(r => r.status === 'OVERSTAY').length,
+        COMPLETED:  allBookings.filter(r => r.status === 'COMPLETED').length,
+        CANCELLED:  allBookings.filter(r => r.status === 'CANCELLED').length,
+        EXPIRED:    allBookings.filter(r => r.status === 'EXPIRED').length,
+    };
+
+    const filterBar = document.querySelector('.filter-bar');
+    if (!filterBar) return;
+
+    filterBar.innerHTML = `
+        <span style="font-size:var(--font-size-xs); font-weight:600; color:var(--color-gray-600);">FILTER:</span>
+        ${[
+            ['ALL', 'All', counts.ALL],
+            ['RESERVED', 'Reserved (Hold)', counts.RESERVED],
+            ['CHECKED_IN', 'Checked In', counts.CHECKED_IN],
+            ['OVERSTAY', 'Overstay', counts.OVERSTAY],
+            ['COMPLETED', 'Completed', counts.COMPLETED],
+            ['CANCELLED', 'Cancelled', counts.CANCELLED],
+            ['EXPIRED', 'Expired', counts.EXPIRED],
+        ].map(([val, label, count]) => `
+            <button class="filter-btn ${activeBookingFilter === val ? 'active' : ''}"
+                onclick="setBookingFilter('${val}')">
+                ${label} <span style="opacity:.7">(${count})</span>
+            </button>
+        `).join('')}
+    `;
 }
 
 function filterBookingsDisplay() {
@@ -164,7 +193,7 @@ function renderBookingCard(r) {
     const remaining = getRemainingTime(r.endTime || 0, currentSimTime);
     const isActive = r.status === 'RESERVED' || r.status === 'CHECKED_IN';
     const canCheckIn  = r.status === 'RESERVED';
-    const canCheckOut = r.status === 'CHECKED_IN' || r.status === 'OVERSTAY';
+    const canCheckOut = r.status === 'CHECKED_IN' || r.status === 'OVERSTAY' || r.status === 'RESERVED';
     const canCancel   = r.status === 'RESERVED';
 
     return `
@@ -223,8 +252,8 @@ function renderBookingCard(r) {
                         <!-- 20-Minute Hold Window for RESERVED slots -->
                         ${r.status === 'RESERVED' ? `
                             <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:6px 10px; font-size:0.75rem; color:#92400e; text-align:right">
-                                <strong>20-Minute Gate Check-In Window:</strong><br>
-                                Arrive before ${minutesToTime(r.expiryDeadline || ((r.startTime || 0) + 20))}
+                                <strong>20-Minute Arrival Check-In Window:</strong><br>
+                                Arrive up to 20m early (or before ${minutesToTime(r.expiryDeadline || ((r.startTime || 0) + 20))}) to check in &amp; update space to OCCUPIED.
                             </div>
                         ` : ''}
 
@@ -263,6 +292,13 @@ function renderBookingCard(r) {
                                     onclick="confirmAction('checkin', '${r.reservationId}', '${escapeHtml(r.vehicleId)}')">
                                     <svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
                                     Verify Gate Check-In
+                                </button>
+                            ` : ''}
+                            ${isActive ? `
+                                <button class="btn btn-secondary btn-sm"
+                                    onclick="openUpdateSpaceModal('${r.reservationId}', '${escapeHtml(r.spaceId)}')">
+                                    <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                    Update Parking Space
                                 </button>
                             ` : ''}
                             ${canCheckOut ? `
@@ -337,9 +373,33 @@ function startCountdownTimers() {
 
 function confirmAction(action, reservationId, vehicleId) {
     const labels = {
-        checkin:  { title: 'Confirm Check-In',  text: 'Are you sure you want to check in?<br>The space status will change to OCCUPIED.', btn: 'Check In', cls: 'btn-teal' },
-        checkout: { title: 'Confirm Check-Out', text: 'Are you sure you want to check out?<br>The parking space will be released and marked AVAILABLE.', btn: 'Check Out', cls: 'btn-primary' },
-        cancel:   { title: 'Cancel Reservation', text: 'Are you sure you want to cancel this reservation?<br>The space will be released and you will be removed from the queue.', btn: 'Cancel Reservation', cls: 'btn-danger' },
+        checkin: {
+            title: 'Verify Gate Check-In',
+            text: 'Verify vehicle arrival at the barrier gate. The parking stall status will change to <strong>OCCUPIED</strong>.',
+            btn: 'Confirm Check-In',
+            badgeBg: '#dcfce7',
+            badgeColor: '#16a34a',
+            cls: 'btn-primary',
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>`
+        },
+        checkout: {
+            title: 'Gate Check-Out & Depart',
+            text: 'Confirm vehicle departure at the gate barrier. The parking stall will be released immediately and updated to <strong>AVAILABLE</strong>.',
+            btn: 'Complete Check-Out',
+            badgeBg: '#e0f2fe',
+            badgeColor: '#0284c7',
+            cls: 'btn-primary',
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`
+        },
+        cancel: {
+            title: 'Cancel Reservation',
+            text: 'Are you sure you want to cancel this reservation? The held space will be released immediately back to available stalls.',
+            btn: 'Cancel Reservation',
+            badgeBg: '#fee2e2',
+            badgeColor: '#dc2626',
+            cls: 'btn-danger',
+            icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`
+        },
     };
 
     const info = labels[action];
@@ -347,18 +407,15 @@ function confirmAction(action, reservationId, vehicleId) {
 
     document.getElementById('action-modal-title').textContent = info.title;
     document.getElementById('action-modal-body').innerHTML = `
-        <div class="d-flex align-center gap-3 mb-4">
-            <div style="width:44px;height:44px;background:var(--color-primary-light);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                <svg viewBox="0 0 24 24" style="width:22px;height:22px;stroke:var(--color-primary);fill:none;stroke-width:2;stroke-linecap:round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
+        <div style="display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.25rem">
+            <div style="width:48px;height:48px;border-radius:50%;background:${info.badgeBg};color:${info.badgeColor};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                ${info.icon}
             </div>
-            <div>
-                <p style="font-size:var(--font-size-sm)">${info.text}</p>
-                <p style="font-size:var(--font-size-xs);color:var(--color-gray-600);margin-top:6px">
-                    Reservation: <code>${escapeHtml(reservationId)}</code>
-                </p>
+            <div style="flex:1">
+                <p style="font-size:var(--font-size-sm);color:var(--text-main);margin:0 0 6px 0;line-height:1.45">${info.text}</p>
+                <div style="font-size:var(--font-size-xs);color:var(--text-muted)">
+                    Reservation Reference: <code style="font-weight:700">${escapeHtml(reservationId)}</code>
+                </div>
             </div>
         </div>
         <div id="action-modal-result"></div>
@@ -380,10 +437,16 @@ function confirmAction(action, reservationId, vehicleId) {
                 result = await API.cancelReservation(reservationId);
             }
 
-            showToast('success', 'Action Successful', result.message || 'Operation completed.');
+            const successMsg = action === 'checkout'
+                ? `Gate check-out confirmed! Stall released to AVAILABLE.`
+                : (action === 'checkin'
+                    ? `Gate check-in verified! Stall is now OCCUPIED.`
+                    : `Reservation ${reservationId} cancelled.`);
+
+            showToast('success', info.title, successMsg);
             closeModal('booking-action-modal');
-            // Reload bookings to reflect backend state
-            await loadBookings();
+            // Instant in-place refresh
+            await refreshBookingsData();
 
         } catch (err) {
             const resultEl = document.getElementById('action-modal-result');
@@ -391,11 +454,11 @@ function confirmAction(action, reservationId, vehicleId) {
                 resultEl.innerHTML = `
                     <div class="alert alert-error">
                         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        <div><strong>Action Failed</strong><div>${escapeHtml(err.message)}</div></div>
+                        <div><strong>Operation Notice</strong><div>${escapeHtml(err.message)}</div></div>
                     </div>
                 `;
             }
-            showToast('error', 'Action Failed', err.message);
+            showToast('error', 'Action Notice', err.message);
         } finally {
             setButtonLoading(confirmBtn, false);
         }
@@ -405,6 +468,7 @@ function confirmAction(action, reservationId, vehicleId) {
 }
 
 window.loadBookings = loadBookings;
+window.refreshBookingsData = refreshBookingsData;
 window.setBookingFilter = setBookingFilter;
 window.filterBookingsDisplay = filterBookingsDisplay;
 window.confirmAction = confirmAction;

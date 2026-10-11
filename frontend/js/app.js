@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initToastSystem();
     navigateTo('dashboard');
     startTimeRefresh();
+    startLiveRealTimeClock();
 });
 
 // ============================================================
@@ -126,8 +127,61 @@ function closeMobileSidebar() {
 }
 
 // ============================================================
-// TIME REFRESH
+// LIVE REAL-TIME CLOCK & TIME REFRESH
 // ============================================================
+
+function startLiveRealTimeClock() {
+    updateLiveClockDisplays();
+    setInterval(updateLiveClockDisplays, 1000);
+}
+
+function updateLiveClockDisplays() {
+    const now = new Date();
+    
+    // Time formatted with seconds and AM/PM
+    const hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = String(hours % 12 || 12).padStart(2, '0');
+    const timeFormatted = `${hours12}:${minutes}:${seconds} ${ampm}`;
+
+    // Date formatted
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayName = days[now.getDay()];
+    const monthName = months[now.getMonth()];
+    const dateFormatted = `${dayName}, ${now.getDate()} ${monthName} ${now.getFullYear()}`;
+
+    // Header live current time elements
+    const headerTimeEl = document.getElementById('live-current-time');
+    const headerDateEl = document.getElementById('live-current-date');
+    if (headerTimeEl) headerTimeEl.textContent = timeFormatted;
+    if (headerDateEl) headerDateEl.textContent = dateFormatted;
+
+    // Sidebar live current time element
+    const sidebarTimeEl = document.getElementById('sidebar-current-time');
+    if (sidebarTimeEl) sidebarTimeEl.textContent = `${hours12}:${minutes}:${seconds} ${ampm}`;
+
+    // Find Parking page current time banner (if visible)
+    const fpTimeEl = document.getElementById('find-parking-current-time');
+    if (fpTimeEl) fpTimeEl.textContent = timeFormatted;
+}
+
+function getCurrentTime24() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+function getCurrentDateIso() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
 
 async function startTimeRefresh() {
     await refreshSimulatedTime();
@@ -167,32 +221,39 @@ function initToastSystem() {
  * @param {string} message
  * @param {number} duration milliseconds
  */
-function showToast(type, title, message = '', duration = 4000) {
+function showToast(type, title, message = '', duration = 4200) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
-    const icons = {
-        success: `<polyline points="20 6 9 17 4 12"/>`,
-        error:   `<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>`,
-        warning: `<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
-        info:    `<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`,
+    const iconSvgs = {
+        success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+        error:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+        warning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+        info:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
     };
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.innerHTML = `
-        <svg viewBox="0 0 24 24"><${icons[type] ? '' : 'circle cx="12" cy="12" r="10"'}${icons[type] || ''}/></svg>
+        <div class="toast-icon-badge">
+            ${iconSvgs[type] || iconSvgs.info}
+        </div>
         <div class="toast-content">
             <div class="toast-title">${escapeHtml(title)}</div>
             ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
         </div>
+        <button class="toast-close-btn" onclick="this.closest('.toast').remove()" aria-label="Close notification">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
     `;
 
     container.appendChild(toast);
 
     setTimeout(() => {
-        toast.style.animation = 'slideInRight 0.3s ease reverse';
-        setTimeout(() => toast.remove(), 300);
+        if (toast.isConnected) {
+            toast.style.animation = 'slideInRight 0.25s ease reverse';
+            setTimeout(() => toast.remove(), 240);
+        }
     }, duration);
 }
 
@@ -204,6 +265,7 @@ function openModal(modalId) {
     const overlay = document.getElementById(modalId);
     if (overlay) {
         overlay.classList.add('open');
+        overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
 }
@@ -212,6 +274,7 @@ function closeModal(modalId) {
     const overlay = document.getElementById(modalId);
     if (overlay) {
         overlay.classList.remove('open');
+        overlay.classList.remove('active');
         document.body.style.overflow = '';
     }
 }
@@ -364,3 +427,6 @@ window.simulatedTime = simulatedTime;
 window.clearCountdownIntervals = clearCountdownIntervals;
 window.countdownIntervals = countdownIntervals;
 window.quickAdvanceClock = quickAdvanceClock;
+window.getCurrentTime24 = getCurrentTime24;
+window.getCurrentDateIso = getCurrentDateIso;
+window.updateLiveClockDisplays = updateLiveClockDisplays;

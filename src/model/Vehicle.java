@@ -24,6 +24,12 @@ public class Vehicle {
         return ownerName;
     }
 
+    public void setOwnerName(String ownerName) {
+        if (ownerName != null && !ownerName.trim().isEmpty()) {
+            this.ownerName = ownerName.trim();
+        }
+    }
+
     public VehicleType getType() {
         return type;
     }

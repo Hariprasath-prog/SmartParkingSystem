@@ -425,8 +425,85 @@ public class ParkingOperationsController {
             throw new IllegalStateException("Vehicle is already checked-in.");
         }
 
+        // Arrival before 20 mins rule:
+        // A user can arrive up to 20 mins before their scheduled slot (startTime - 20)
+        // or within the 20-minute hold window before expiry.
+        int earliestArrival = res.getStartTime() - 20;
+        int latestArrival = res.getExpiryDeadline() > 0 ? res.getExpiryDeadline() : (res.getStartTime() + 20);
+
+        if (currentSimulatedTime > 0 && currentSimulatedTime < earliestArrival) {
+            throw new IllegalStateException("Early arrival window not yet open. You can check in up to 20 minutes before start time (from " +
+                    Reservation.formatTime(earliestArrival) + "). Current network time is " + Reservation.formatTime(currentSimulatedTime) + ".");
+        }
+
         // Transition RESERVED -> CHECKED_IN; space -> OCCUPIED
         res.checkIn();
+        return res;
+    }
+
+    /**
+     * Updates/reassigns the parking space for an active reservation.
+     * Frees the old space back to AVAILABLE, and marks the new space as RESERVED or OCCUPIED.
+     */
+    public synchronized Reservation updateParkingSpace(String reservationId, String newSpaceId) {
+        Reservation res = reservationManager.getReservation(reservationId);
+        if (res == null) {
+            throw new IllegalArgumentException("Reservation " + reservationId + " does not exist.");
+        }
+        if (res.getStatus() != ReservationStatus.RESERVED && res.getStatus() != ReservationStatus.CHECKED_IN) {
+            throw new IllegalStateException("Cannot update space for reservation in " + res.getStatus() + " status.");
+        }
+        if (newSpaceId == null || newSpaceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Target parking space ID cannot be empty.");
+        }
+
+        newSpaceId = newSpaceId.trim().toUpperCase();
+        if (res.getSpace().getSpaceId().equalsIgnoreCase(newSpaceId)) {
+            return res; // Already assigned to this space
+        }
+
+        // Find target space across all facilities
+        ParkingSpace targetSpace = spaceMap.get(newSpaceId);
+
+        if (targetSpace == null) {
+            throw new IllegalArgumentException("Parking space " + newSpaceId + " not found.");
+        }
+
+        // Check vehicle compatibility
+        if (!targetSpace.acceptsVehicle(res.getVehicle())) {
+            throw new IllegalStateException("Space " + newSpaceId + " (" + targetSpace.getSpaceType() +
+                    ") is not compatible with vehicle type " + res.getVehicle().getType() + ".");
+        }
+
+        // Check accessibility permit requirement
+        if (targetSpace instanceof model.AccessibleSpace && !res.getVehicle().hasAccessiblePermit()) {
+            throw new IllegalStateException("Space " + newSpaceId + " is an Accessible Stall reserved for vehicles with mobility permits.");
+        }
+
+        // Check if target space is available
+        if (!targetSpace.isAvailable()) {
+            throw new IllegalStateException("Parking space " + newSpaceId + " is currently " + targetSpace.getStatus() + " and not available.");
+        }
+
+        // Check for interval conflicts on target space
+        if (reservationManager.hasOverlappingReservation(targetSpace.getSpaceId(), res.getStartTime(), res.getEndTime())) {
+            throw new IllegalStateException("Parking space " + newSpaceId + " has a scheduling conflict during " +
+                    Reservation.formatTime(res.getStartTime()) + " - " + Reservation.formatTime(res.getEndTime()) + ".");
+        }
+
+        // Free previous space
+        ParkingSpace oldSpace = res.getSpace();
+        oldSpace.reset();
+
+        // Assign and transition new space to match current reservation state
+        if (res.getStatus() == ReservationStatus.CHECKED_IN) {
+            targetSpace.reserve();
+            targetSpace.checkIn(); // Becomes OCCUPIED
+        } else {
+            targetSpace.reserve(); // Becomes RESERVED
+        }
+
+        res.setSpace(targetSpace);
         return res;
     }
 

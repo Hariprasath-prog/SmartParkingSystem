@@ -56,6 +56,13 @@ public class Reservation {
         return space;
     }
 
+    public void setSpace(ParkingSpace space) {
+        if (space == null) {
+            throw new IllegalArgumentException("Parking space cannot be null.");
+        }
+        this.space = space;
+    }
+
     public int getStartTime() {
         return startTime;
     }
@@ -117,14 +124,20 @@ public class Reservation {
     }
 
     /**
-     * Transition: CHECKED_IN or OVERSTAY -> COMPLETED
+     * Transition: CHECKED_IN, OVERSTAY, or RESERVED -> COMPLETED
      */
     public void checkOut() {
-        if (status != ReservationStatus.CHECKED_IN && status != ReservationStatus.OVERSTAY) {
+        if (status != ReservationStatus.CHECKED_IN && status != ReservationStatus.OVERSTAY && status != ReservationStatus.RESERVED) {
             throw new IllegalStateException("Cannot check out: reservation " + reservationId +
-                    " status is " + status + " (must be CHECKED_IN or OVERSTAY).");
+                    " status is " + status + " (must be RESERVED, CHECKED_IN, or OVERSTAY).");
         }
-        space.checkOut();
+        if (space != null) {
+            if (space.getStatus() == SpaceStatus.OCCUPIED) {
+                space.checkOut();
+            } else if (space.getStatus() == SpaceStatus.RESERVED) {
+                space.cancel();
+            }
+        }
         this.status = ReservationStatus.COMPLETED;
     }
 
