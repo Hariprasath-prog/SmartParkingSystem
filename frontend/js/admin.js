@@ -4,7 +4,6 @@
  * Provides administrative capabilities:
  * - View all reservations with full details
  * - Process expired reservations (triggers backend grace-period engine)
- * - Advance simulated clock
  * - View PriorityQueue waiting list
  * - View all registered vehicles
  * - Monitor parking lot occupancy
@@ -39,10 +38,8 @@ function renderAdminPage(dashboard, queue, vehicles) {
         <div class="alert alert-info mb-5">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <div>
-                <strong>Admin Panel</strong> — All operations are delegated to the Java backend.
-                System Simulated Time: <strong>${escapeHtml(dashboard.simulatedTimeFormatted)}</strong>
-                (${dashboard.simulatedTime} minutes from midnight).
-                Expiry grace period: <strong>20 minutes</strong> (DEFAULT_GRACE_PERIOD_MINUTES).
+                <strong>Transit Management Authority</strong> — Real-time facility governance, fleet monitoring, and automated reservation management.
+                Arrival hold grace period: <strong>20 minutes</strong>.
             </div>
         </div>
 
@@ -50,7 +47,6 @@ function renderAdminPage(dashboard, queue, vehicles) {
         <div class="filter-bar mb-5">
             <span style="font-size:var(--font-size-xs); font-weight:600; color:var(--text-muted);">SECTION:</span>
             <button class="filter-btn ${adminSection === 'overview' ? 'active' : ''}" onclick="switchAdminSection('overview')">Overview</button>
-            <button class="filter-btn ${adminSection === 'time' ? 'active' : ''}" onclick="switchAdminSection('time')">Time Simulation</button>
             <button class="filter-btn ${adminSection === 'reservations' ? 'active' : ''}" onclick="switchAdminSection('reservations')">All Reservations</button>
             <button class="filter-btn ${adminSection === 'queue' ? 'active' : ''}" onclick="switchAdminSection('queue')">Waiting Queue (${queue.length})</button>
             <button class="filter-btn ${adminSection === 'vehicles' ? 'active' : ''}" onclick="switchAdminSection('vehicles')">Fleet Vehicles (${vehicles.length})</button>
@@ -80,7 +76,6 @@ function switchAdminSection(section) {
 function renderAdminSection(section, dashboard, queue, vehicles) {
     switch (section) {
         case 'overview':      return renderAdminOverview(dashboard);
-        case 'time':          return renderAdminTimeControl(dashboard);
         case 'reservations':  return renderAdminReservations();
         case 'queue':         return renderAdminQueue(queue);
         case 'vehicles':      return renderAdminVehicles(vehicles);
@@ -171,7 +166,7 @@ async function processExpiredReservations() {
             if (result.expiredCount === 0) {
                 resultEl.innerHTML = `<div class="alert alert-info mb-4">
                     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <div>No reservations expired at the current simulated time (${window._adminData?.dashboard?.simulatedTimeFormatted}). The system's grace period is 20 minutes past the booking start time.</div>
+                    <div>No reservations expired at the current time (${window._adminData?.dashboard?.simulatedTimeFormatted}). The system's grace period is 20 minutes past the booking start time.</div>
                 </div>`;
             } else {
                 resultEl.innerHTML = `<div class="alert alert-success mb-4">
@@ -187,120 +182,6 @@ async function processExpiredReservations() {
         showToast('error', 'Expiry Processing Failed', err.message);
     } finally {
         setButtonLoading(btn, false);
-    }
-}
-
-// ---- Time Control ----
-function renderAdminTimeControl(dashboard) {
-    return `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:var(--space-5); align-items:start">
-            <!-- Current Time Display -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Current Simulated Time
-                    </div>
-                </div>
-                <div class="card-body" style="text-align:center; padding:var(--space-8)">
-                    <div style="font-size:3rem; font-weight:800; color:var(--color-navy); font-variant-numeric:tabular-nums" id="admin-time-display">
-                        ${escapeHtml(dashboard.simulatedTimeFormatted)}
-                    </div>
-                    <div style="font-size:var(--font-size-sm); color:var(--color-gray-600); margin-top:var(--space-2)">
-                        ${dashboard.simulatedTime} minutes from midnight
-                    </div>
-                    <div class="alert alert-info mt-4" style="text-align:left">
-                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                        <div style="font-size:12px">
-                            This is the backend's simulated clock used for reservation expiry calculations.
-                            The reservation start/end times you enter in the booking form are matched against this clock.
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Time Controls -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        Advance Simulated Time
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="time-control-result"></div>
-                    <div class="form-group">
-                        <label class="form-label">Quick Advance</label>
-                        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:var(--space-2)">
-                            ${[15, 20, 30, 60, 120, 180].map(mins => `
-                                <button class="btn btn-secondary btn-sm" onclick="advanceTime(${mins})">
-                                    +${mins >= 60 ? (mins/60)+'h' : mins+'m'}
-                                </button>
-                            `).join('')}
-                        </div>
-                    </div>
-
-                    <div class="form-group mt-4">
-                        <label class="form-label" for="custom-advance">Custom Advance (minutes)</label>
-                        <div style="display:flex; gap:var(--space-2)">
-                            <input type="number" id="custom-advance" class="form-control" min="1" max="1440" value="60" placeholder="Minutes" />
-                            <button class="btn btn-primary" onclick="advanceCustomTime()">Advance</button>
-                        </div>
-                    </div>
-
-                    <div class="form-group mt-4">
-                        <label class="form-label" for="set-time-mins">Set Exact Time (HH:MM)</label>
-                        <div style="display:flex; gap:var(--space-2)">
-                            <input type="time" id="set-time-input" class="form-control" value="${escapeHtml(dashboard.simulatedTimeFormatted)}" />
-                            <button class="btn btn-teal" onclick="setExactTime()">Set Time</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-async function advanceTime(minutes) {
-    try {
-        const result = await API.setSimulatedTime({ advance: minutes });
-        updateAdminTimeDisplay(result.simulatedTimeFormatted);
-        showToast('success', 'Time Advanced', `Simulated time is now ${result.simulatedTimeFormatted}`);
-    } catch (err) {
-        showToast('error', 'Failed to advance time', err.message);
-    }
-}
-
-async function advanceCustomTime() {
-    const mins = parseInt(document.getElementById('custom-advance')?.value);
-    if (isNaN(mins) || mins < 1) {
-        showToast('warning', 'Invalid Input', 'Please enter a positive number of minutes.');
-        return;
-    }
-    await advanceTime(mins);
-}
-
-async function setExactTime() {
-    const timeInput = document.getElementById('set-time-input')?.value;
-    if (!timeInput) return;
-    const minutes = timeToMinutes(timeInput);
-    try {
-        const result = await API.setSimulatedTime({ minutes });
-        updateAdminTimeDisplay(result.simulatedTimeFormatted);
-        showToast('success', 'Time Set', `Simulated time is now ${result.simulatedTimeFormatted}`);
-    } catch (err) {
-        showToast('error', 'Failed to set time', err.message);
-    }
-}
-
-function updateAdminTimeDisplay(formatted) {
-    const el = document.getElementById('admin-time-display');
-    if (el) el.textContent = formatted;
-    const sidebarEl = document.getElementById('sim-time-display');
-    if (sidebarEl) sidebarEl.textContent = formatted;
-
-    if (window._adminData) {
-        window._adminData.dashboard.simulatedTimeFormatted = formatted;
     }
 }
 
@@ -489,7 +370,4 @@ function renderAdminVehicles(vehicles) {
 window.loadAdmin = loadAdmin;
 window.switchAdminSection = switchAdminSection;
 window.processExpiredReservations = processExpiredReservations;
-window.advanceTime = advanceTime;
-window.advanceCustomTime = advanceCustomTime;
-window.setExactTime = setExactTime;
 window.refreshAdminReservations = refreshAdminReservations;

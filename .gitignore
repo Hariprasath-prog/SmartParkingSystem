@@ -2,3 +2,6 @@ bin/
 out/
 *.class
 .DS_Store
+data/*.db
+data/*.db-*
+node_modules/

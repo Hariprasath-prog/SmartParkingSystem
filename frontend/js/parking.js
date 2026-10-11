@@ -54,7 +54,14 @@ function renderFindParkingForm(simMinutes) {
             <option value="N9">N9 – South Metro Terminal (LOT-C)</option>
         `;
 
-    // Compute intelligent initial defaults matching the simulated network clock
+    // Compute intelligent initial defaults matching the simulated network clock & logged in session
+    const session = (typeof Auth !== 'undefined') ? Auth.getSession() : null;
+    const isUserRole = session && session.role !== 'admin';
+    const activeVehicleId = (session && session.vehicleId) ? session.vehicleId : 'KA-01-AB-1234';
+    const activeOwnerName = (session && session.name) ? session.name : 'John Doe';
+    const activeVehicleType = (session && session.vehicleType) ? session.vehicleType : 'CAR';
+    const activeAccessible = !!(session && session.accessiblePermit);
+
     const startMins = simMinutes;
     const endMins = (simMinutes + 120) % 1440; // Default 2-hour duration
     const startTimeStr = minutesToTime(startMins);
@@ -93,6 +100,16 @@ function renderFindParkingForm(simMinutes) {
                         </div>
                     </div>
 
+                    ${isUserRole ? `
+                    <div class="user-profile-badge-box mb-3" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:0.65rem 0.85rem; display:flex; align-items:center; justify-content:space-between">
+                        <div style="display:flex; align-items:center; gap:0.5rem">
+                            <span style="font-size:0.75rem; font-weight:700; color:#166534; text-transform:uppercase; letter-spacing:0.04em">Driver Account:</span>
+                            <span style="font-weight:700; color:#0f172a; font-size:0.85rem">${escapeHtml(activeOwnerName)}</span>
+                        </div>
+                        <span style="font-family:var(--font-mono); font-weight:700; color:#047857; background:#dcfce7; padding:2px 7px; border-radius:4px; font-size:0.8rem">${escapeHtml(activeVehicleId)}</span>
+                    </div>
+                    ` : ''}
+
                     <form id="find-parking-form" novalidate>
 
                         <!-- Vehicle Registration Number -->
@@ -101,7 +118,7 @@ function renderFindParkingForm(simMinutes) {
                                 Vehicle Registration Number <span class="required">*</span>
                             </label>
                             <input type="text" id="fp-vehicle-id" class="form-control text-mono"
-                                placeholder="e.g. TN-01-AB-1234" value="TN-01-AB-1234"
+                                placeholder="e.g. KA-01-AB-1234" value="${escapeHtml(activeVehicleId)}"
                                 autocomplete="off" required style="font-weight:700; text-transform:uppercase"
                             />
                             <div class="form-error" id="fp-vehicle-id-error">Please enter a valid vehicle registration plate.</div>
@@ -113,7 +130,7 @@ function renderFindParkingForm(simMinutes) {
                                 Owner's Name <span class="required">*</span>
                             </label>
                             <input type="text" id="fp-owner-name" class="form-control"
-                                placeholder="e.g. Anand Kumar" value="Anand Kumar" required />
+                                placeholder="e.g. Anand Kumar" value="${escapeHtml(activeOwnerName)}" required />
                             <div class="form-error" id="fp-owner-name-error">Please enter the owner's name.</div>
                         </div>
 
@@ -124,8 +141,8 @@ function renderFindParkingForm(simMinutes) {
                                     Vehicle Classification <span class="required">*</span>
                                 </label>
                                 <select id="fp-vehicle-type" class="form-control" required>
-                                    <option value="CAR" selected>Standard Passenger Car (4-Wheeler)</option>
-                                    <option value="TWO_WHEELER">Two-Wheeler (Motorbike / Scooter)</option>
+                                    <option value="CAR" ${activeVehicleType === 'CAR' ? 'selected' : ''}>Standard Passenger Car (4-Wheeler)</option>
+                                    <option value="TWO_WHEELER" ${activeVehicleType === 'TWO_WHEELER' ? 'selected' : ''}>Two-Wheeler (Motorbike / Scooter)</option>
                                 </select>
                             </div>
 
@@ -142,7 +159,7 @@ function renderFindParkingForm(simMinutes) {
                         <!-- Accessibility Permit Option -->
                         <div class="form-group">
                             <label class="d-flex align-center gap-2" style="cursor:pointer">
-                                <input type="checkbox" id="fp-accessible" style="width:16px;height:16px" />
+                                <input type="checkbox" id="fp-accessible" style="width:16px;height:16px" ${activeAccessible ? 'checked' : ''} />
                                 <span style="font-size:0.85rem; font-weight:600; color:var(--text-main)">
                                     Authorized Accessible / Disability Mobility Permit
                                 </span>
@@ -321,10 +338,11 @@ function attachFindParkingEvents() {
 }
 
 async function handleFindParkingSubmit() {
-    const vehicleId = document.getElementById('fp-vehicle-id')?.value.trim().toUpperCase();
-    const ownerName = document.getElementById('fp-owner-name')?.value.trim() || 'Driver';
-    const vehicleType = document.getElementById('fp-vehicle-type')?.value;
-    const accessible = document.getElementById('fp-accessible')?.checked;
+    const session = (typeof Auth !== 'undefined') ? Auth.getSession() : null;
+    const vehicleId = document.getElementById('fp-vehicle-id')?.value.trim().toUpperCase() || (session?.vehicleId || '');
+    const ownerName = document.getElementById('fp-owner-name')?.value.trim() || (session?.name || 'Driver');
+    const vehicleType = document.getElementById('fp-vehicle-type')?.value || (session?.vehicleType || 'CAR');
+    const accessible = document.getElementById('fp-accessible') ? document.getElementById('fp-accessible').checked : !!(session?.accessiblePermit);
     const originNode = document.getElementById('origin-node')?.value || 'N1';
     const preferredLotId = document.getElementById('fp-preferred-lot')?.value || null;
     const maxDistanceKm = parseFloat(document.getElementById('fp-max-distance')?.value || '-1');
@@ -1008,12 +1026,12 @@ function getSpaceTypeIconSvg(type) {
 // Global exports for inline HTML handlers
 window.loadFindParking = loadFindParking;
 window.loadParkingLayout = loadParkingLayout;
+window.handleFindParkingSubmit = handleFindParkingSubmit;
 window.setDurationPreset = setDurationPreset;
 window.syncBookingWithCurrentTime = syncBookingWithCurrentTime;
 window.openUpdateSpaceModal = openUpdateSpaceModal;
 window.quickVerifyCheckIn = quickVerifyCheckIn;
 window.quickBookAlternativeLot = quickBookAlternativeLot;
-window.filterLayoutByFacility = filterLayoutByFacility;
-window.filterLayoutByType = filterLayoutByType;
-window.filterLayoutByStatus = filterLayoutByStatus;
-window.openSpaceDetailModal = openSpaceDetailModal;
+window.filterBaysByType = filterBaysByType;
+window.openStallDetailModal = openStallDetailModal;
+window.openSpaceDetailModal = openStallDetailModal;

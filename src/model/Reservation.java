@@ -87,6 +87,10 @@ public class Reservation {
         this.expiryDeadline = expiryDeadline;
     }
 
+    public void setStatus(ReservationStatus status) {
+        this.status = status;
+    }
+
     /**
      * Checks if this reservation is currently active (occupying or reserving the time slot).
      * Overstaying vehicles physically occupy the slot and must block new bookings.

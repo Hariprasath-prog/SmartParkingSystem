@@ -50,6 +50,10 @@ public class SmartParkingServer {
         controller = new ParkingOperationsController(roadNetwork);
         SampleData.initializeSystemData(controller);
 
+        // Automatically match network simulated clock with live current system time
+        java.time.LocalTime startTime = java.time.LocalTime.now();
+        controller.setSimulatedTime(startTime.getHour() * 60 + startTime.getMinute());
+
         // 2. Locate frontend directory
         frontendDir = new File("frontend");
         if (!frontendDir.exists()) {
@@ -68,7 +72,7 @@ public class SmartParkingServer {
         server.setExecutor(Executors.newFixedThreadPool(8)); // Multi-threaded executor for fast responsive processing
         server.start();
 
-        // 4. Background Server-Side 20-Minute Expiration & Overstay Poller (Section 4)
+        // 4. Background Server-Side Auto-Time Sync & 20-Minute Expiration & Overstay Poller
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "server-expiry-poller");
             t.setDaemon(true);
@@ -77,11 +81,14 @@ public class SmartParkingServer {
         scheduler.scheduleWithFixedDelay(() -> {
             try {
                 if (controller != null) {
+                    // Continuously match network simulated clock with live real-world time automatically
+                    java.time.LocalTime now = java.time.LocalTime.now();
+                    controller.setSimulatedTime(now.getHour() * 60 + now.getMinute());
                     controller.processExpiredReservations(20);
                     controller.checkOverstays();
                 }
             } catch (Throwable ignored) {}
-        }, 3, 3, TimeUnit.SECONDS);
+        }, 1, 3, TimeUnit.SECONDS);
 
         System.out.println("====================================================================");
         System.out.println("  IDAM NAGAR SMART PARKING SYSTEM — WEB & REST API SERVER STARTED   ");
@@ -91,6 +98,13 @@ public class SmartParkingServer {
         System.out.println("  Dashboard  : http://localhost:" + PORT + "/api/dashboard");
         System.out.println("  Scheduler  : Active (20-min arrival timeout + overstay detection)  ");
         System.out.println("====================================================================");
+
+        // Keep main server daemon thread alive indefinitely
+        try {
+            new java.util.concurrent.CountDownLatch(1).await();
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     // =========================================================================
@@ -540,6 +554,8 @@ public class SmartParkingServer {
     }
 
     private static void handleGetTime(HttpExchange exchange) throws IOException {
+        java.time.LocalTime now = java.time.LocalTime.now();
+        controller.setSimulatedTime(now.getHour() * 60 + now.getMinute());
         int t = controller.getCurrentSimulatedTime();
         String json = "{\"simulatedTime\":" + t + ",\"simulatedTimeFormatted\":\"" + Reservation.formatTime(t) + "\"}";
         sendJsonResponse(exchange, 200, json);
@@ -663,6 +679,14 @@ public class SmartParkingServer {
             String contentType = getMimeType(file.getName());
             exchange.getResponseHeaders().set("Content-Type", contentType);
             exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+
+            boolean isHead = "HEAD".equalsIgnoreCase(exchange.getRequestMethod());
+            if (isHead) {
+                exchange.sendResponseHeaders(200, -1);
+                exchange.close();
+                return;
+            }
+
             exchange.sendResponseHeaders(200, file.length());
 
             try (InputStream is = new FileInputStream(file); OutputStream os = exchange.getResponseBody()) {
@@ -761,6 +785,14 @@ public class SmartParkingServer {
     private static void sendJsonResponse(HttpExchange exchange, int statusCode, String responseJson) throws IOException {
         byte[] bytes = responseJson.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+
+        boolean isHead = "HEAD".equalsIgnoreCase(exchange.getRequestMethod());
+        if (isHead) {
+            exchange.sendResponseHeaders(statusCode, -1);
+            exchange.close();
+            return;
+        }
+
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);

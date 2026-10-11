@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "description": "Smart Parking Allocation System — Idam Nagar Commercial District",
   "scripts": {
-    "dev": "java -cp bin server.SmartParkingServer",
-    "start": "java -cp bin server.SmartParkingServer",
-    "compile": "powershell -Command \"javac -d bin (Get-ChildItem -Recurse -Filter *.java src | Select-Object -ExpandProperty FullName)\"",
-    "test": "java -cp bin util.SystemTestSuite",
-    "console": "java -cp bin main.Main"
+    "dev": "java -cp \"bin;lib/*\" server.SmartParkingServer",
+    "start": "java -cp \"bin;lib/*\" server.SmartParkingServer",
+    "compile": "powershell -Command \"javac -cp 'lib/*' -d bin (Get-ChildItem -Recurse -Filter *.java src | Select-Object -ExpandProperty FullName)\"",
+    "test": "java -cp \"bin;lib/*\" util.SystemTestSuite",
+    "test:db": "java -cp \"bin;lib/*\" util.DatabaseTestSuite",
+    "test:isolation": "node test/test_two_way_isolation.js",
+    "db:view": "java -cp \"bin;lib/*\" db.DatabaseViewer",
+    "console": "java -cp \"bin;lib/*\" main.Main"
   },
   "keywords": [
     "smart-parking",

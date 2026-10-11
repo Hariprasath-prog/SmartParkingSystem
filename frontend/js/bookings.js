@@ -21,11 +21,27 @@ async function loadBookings(silent = false) {
     clearCountdownIntervals();
 
     try {
+        const session = (typeof Auth !== 'undefined') ? Auth.getSession() : null;
+        const isUserRole = session && session.role !== 'admin';
+        const filterParams = (isUserRole && session.vehicleId) ? { vehicleId: session.vehicleId } : {};
+
         const [reservations, timeData] = await Promise.all([
-            API.getReservations(),
+            API.getReservations(filterParams),
             API.getSimulatedTime().catch(() => ({ simulatedTime: 480 }))
         ]);
-        allBookings = reservations;
+
+        if (isUserRole && session) {
+            const userVeh = (session.vehicleId || '').trim().toUpperCase();
+            const userName = (session.name || '').trim().toLowerCase();
+            allBookings = (reservations || []).filter(r => {
+                const rVeh = (r.vehicleId || '').trim().toUpperCase();
+                const rOwner = (r.ownerName || '').trim().toLowerCase();
+                return (userVeh && rVeh === userVeh) || (userName && rOwner === userName);
+            });
+        } else {
+            allBookings = reservations || [];
+        }
+
         currentSimTime = timeData.simulatedTime || 480;
 
         const listEl = document.getElementById('bookings-list');
@@ -48,6 +64,9 @@ function renderBookingsPage() {
     const container = document.getElementById('bookings-content');
     if (!container) return;
 
+    const session = (typeof Auth !== 'undefined') ? Auth.getSession() : null;
+    const isUserRole = session && session.role !== 'admin';
+
     const counts = {
         ALL:        allBookings.length,
         RESERVED:   allBookings.filter(r => r.status === 'RESERVED').length,
@@ -58,7 +77,70 @@ function renderBookingsPage() {
         EXPIRED:    allBookings.filter(r => r.status === 'EXPIRED').length,
     };
 
+    let userHeaderHtml = '';
+    if (isUserRole && session) {
+        userHeaderHtml = `
+            <div class="user-booking-header-card mb-4" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.1rem 1.35rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+                <div style="display:flex; align-items:center; gap:0.9rem">
+                    <div style="width:42px; height:42px; border-radius:10px; background:#ecfdf5; border:1px solid #10b981; display:flex; align-items:center; justify-content:center; color:#059669; font-weight:800; font-size:0.85rem">
+                        DRV
+                    </div>
+                    <div>
+                        <div style="font-weight:800; color:var(--text-main); font-size:1.05rem">
+                            My Reservations — ${escapeHtml(session.name || session.username)}
+                        </div>
+                        <div style="font-size:0.82rem; color:var(--text-muted); display:flex; align-items:center; gap:0.6rem; margin-top:2px">
+                            <span>Registered Plate:</span>
+                            <span style="font-family:var(--font-mono); font-weight:700; color:#047857; background:#dcfce7; padding:1px 7px; border-radius:4px; border:1px solid #a7f3d0">${escapeHtml(session.vehicleId)}</span>
+                            <span>&bull;</span>
+                            <span>Classification: ${escapeHtml(session.vehicleType || 'CAR')}</span>
+                            ${session.accessiblePermit ? '<span class="badge badge-accessible" style="font-size:0.68rem; padding:1px 6px">Accessible Permit</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="navigateTo('find-parking')">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Book New Parking Space</span>
+                </button>
+            </div>
+        `;
+    } else {
+        userHeaderHtml = `
+            <div class="user-booking-header-card mb-4" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.1rem 1.35rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+                <div style="display:flex; align-items:center; gap:0.9rem">
+                    <div style="width:42px; height:42px; border-radius:10px; background:#e0f2fe; border:1px solid #38bdf8; display:flex; align-items:center; justify-content:center; color:#0284c7; font-weight:800; font-size:0.85rem">
+                        ADM
+                    </div>
+                    <div>
+                        <div style="font-weight:800; color:var(--text-main); font-size:1.05rem">
+                            Municipal Bookings Directory — Managing All Reservations
+                        </div>
+                        <div style="font-size:0.82rem; color:var(--text-muted); display:flex; align-items:center; gap:0.6rem; margin-top:2px">
+                            <span>Authority: <strong>${escapeHtml(session?.name || 'Administrator')}</strong></span>
+                            <span>&bull;</span>
+                            <span>Scope: <strong>All Facilities (LOT-A, LOT-B, LOT-C)</strong></span>
+                            <span>&bull;</span>
+                            <span style="color:#0284c7; font-weight:700">Central Directory</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; gap:0.5rem">
+                    <button class="btn btn-secondary btn-sm" onclick="navigateTo('dashboard')">
+                        <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                        <span>Live Dashboard</span>
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="navigateTo('parking-layout')">
+                        <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                        <span>Parking Bay Grid</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     container.innerHTML = `
+        ${userHeaderHtml}
+
         <!-- Search Bar -->
         <div class="card mb-5">
             <div class="card-body" style="padding:var(--space-4) var(--space-5)">
@@ -66,7 +148,7 @@ function renderBookingsPage() {
                     <div style="flex:1; min-width:200px; position:relative">
                         <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--color-gray-400);fill:none;stroke-width:2;stroke-linecap:round;pointer-events:none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         <input type="text" id="booking-search" class="form-control" style="padding-left:2.5rem"
-                            placeholder="Search by vehicle ID or reservation ID..." oninput="filterBookingsDisplay()" />
+                            placeholder="${isUserRole ? 'Search your reservation ID or stall...' : 'Search by vehicle ID or reservation ID...'}" oninput="filterBookingsDisplay()" />
                     </div>
                     <button class="btn btn-ghost btn-sm" onclick="loadBookings()">
                         <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round">
@@ -164,19 +246,29 @@ function filterBookingsDisplay() {
 }
 
 function renderBookingsList(reservations) {
+    const session = (typeof Auth !== 'undefined') ? Auth.getSession() : null;
+    const isUserRole = session && session.role !== 'admin';
+
     const filtered = reservations.filter(r =>
         activeBookingFilter === 'ALL' || r.status === activeBookingFilter
     );
 
     if (filtered.length === 0) {
+        let emptyMsg = 'No reservations have been made yet.';
+        if (isUserRole && session && session.vehicleId) {
+            emptyMsg = activeBookingFilter === 'ALL'
+                ? `No reservations found for your registered vehicle (<strong>${escapeHtml(session.vehicleId)}</strong>).`
+                : `No ${activeBookingFilter.replace('_', ' ').toLowerCase()} reservations found for vehicle <strong>${escapeHtml(session.vehicleId)}</strong>.`;
+        } else if (activeBookingFilter !== 'ALL') {
+            emptyMsg = `No ${activeBookingFilter.replace('_', ' ').toLowerCase()} reservations found.`;
+        }
+
         return `
             <div class="empty-state">
                 <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 <h3>No Bookings Found</h3>
-                <p>${activeBookingFilter === 'ALL'
-                    ? 'No reservations have been made yet.'
-                    : `No ${activeBookingFilter.replace('_', ' ').toLowerCase()} reservations found.`}</p>
-                <button class="btn btn-primary mt-4" onclick="navigateTo('find-parking')">Find Parking</button>
+                <p>${emptyMsg}</p>
+                <button class="btn btn-primary mt-4" onclick="navigateTo('find-parking')">Book a Parking Bay</button>
             </div>
         `;
     }

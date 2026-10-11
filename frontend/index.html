@@ -46,9 +46,9 @@
 
         <!-- Navigation Menu -->
         <nav class="sidebar-nav" role="list">
-            <div class="nav-section-label">Operations</div>
+            <div class="nav-section-label" id="driver-nav-section-label">Operations</div>
 
-            <a class="nav-item active" data-page="dashboard" role="listitem" href="#dashboard">
+            <a class="nav-item" data-page="dashboard" role="listitem" href="#dashboard">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <rect x="3" y="3" width="7" height="7" rx="1"/>
                     <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -82,10 +82,10 @@
                     <line x1="16" y1="13" x2="8" y2="13"/>
                     <line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
-                <span>My Bookings</span>
+                <span id="nav-bookings-label">My Bookings</span>
             </a>
 
-            <div class="nav-section-label" style="margin-top: 1rem">Control &amp; Governance</div>
+            <div class="nav-section-label" id="admin-nav-section-label" style="margin-top: 1rem">Control &amp; Governance</div>
 
             <a class="nav-item" data-page="admin" role="listitem" href="#admin">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -96,10 +96,9 @@
             </a>
         </nav>
 
-        <!-- Sidebar Footer: Simulated Time Display -->
-        <!-- Sidebar Footer: Current Time & Simulated Time Display -->
+        <!-- Sidebar Footer: Current Time Display -->
         <div class="sidebar-footer">
-            <div class="current-time-sidebar-badge" style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid rgba(255,255,255,0.07)">
+            <div class="current-time-sidebar-badge" style="display:flex;align-items:center;gap:0.75rem;">
                 <div class="sim-clock-icon" style="background: rgba(16, 185, 129, 0.15)">
                     <svg viewBox="0 0 24 24" style="stroke:#10b981;width:16px;height:16px;fill:none;stroke-width:2">
                         <circle cx="12" cy="12" r="10"/>
@@ -109,18 +108,6 @@
                 <div>
                     <div class="sim-time-label" style="color:#34d399">Live Current Time</div>
                     <div class="sim-time-value" id="sidebar-current-time" style="font-size:0.92rem;color:#ecfdf5">--:--:--</div>
-                </div>
-            </div>
-            <div class="sim-time-badge">
-                <div class="sim-clock-icon">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 16 14"/>
-                    </svg>
-                </div>
-                <div>
-                    <div class="sim-time-label">Network Simulated Clock</div>
-                    <div class="sim-time-value" id="sim-time-display">08:00</div>
                 </div>
             </div>
         </div>
@@ -157,14 +144,6 @@
             </div>
 
             <div class="header-actions">
-                <!-- Quick Time Advancement Buttons (Fast Testing of 20-min Timeout) -->
-                <div class="clock-quick-advance" title="Advance simulated clock to test 20-min timeouts">
-                    <span class="clock-quick-label">Clock:</span>
-                    <button class="clock-quick-btn" onclick="quickAdvanceClock(15)">+15m</button>
-                    <button class="clock-quick-btn" onclick="quickAdvanceClock(20)">+20m</button>
-                    <button class="clock-quick-btn" onclick="quickAdvanceClock(60)">+1h</button>
-                </div>
-
                 <button class="btn btn-primary btn-sm" onclick="navigateTo('find-parking')" id="quick-book-btn">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <line x1="12" y1="5" x2="12" y2="19"/>
@@ -179,7 +158,7 @@
         <main class="page-content" role="main">
 
             <!-- PAGE: DASHBOARD -->
-            <section id="page-dashboard" class="page active" aria-labelledby="page-title">
+            <section id="page-dashboard" class="page" aria-labelledby="page-title">
                 <div id="dashboard-content">
                     <div class="loading-spinner"><div class="spinner"></div></div>
                 </div>
@@ -268,6 +247,7 @@
 <div id="toast-container"></div>
 
 <!-- Scripts -->
+<script src="js/auth.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
 <script src="js/validation.js"></script>

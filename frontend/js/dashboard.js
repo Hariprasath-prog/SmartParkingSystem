@@ -94,13 +94,6 @@ function renderDashboard(data) {
             </div>
 
             <div class="telemetry-controls">
-                <div class="clock-quick-advance" title="Quickly advance network simulated time to test 20-min hold expirations and overstays">
-                    <span class="clock-quick-label">Advance Clock:</span>
-                    <button class="clock-quick-btn" onclick="quickAdvanceClock(15)">+15m</button>
-                    <button class="clock-quick-btn" onclick="quickAdvanceClock(20)">+20m</button>
-                    <button class="clock-quick-btn" onclick="quickAdvanceClock(60)">+1h</button>
-                </div>
-
                 <button class="btn btn-secondary btn-sm" onclick="loadDashboard(false)" title="Force telemetry re-sync">
                     <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
                         <polyline points="23 4 23 10 17 10"/>
@@ -281,12 +274,12 @@ function renderDashboard(data) {
                 </div>
                 <div class="card-body">
                     <div style="display:flex; flex-direction:column; gap:0.75rem">
-                        <button class="btn btn-primary btn-block" onclick="navigateTo('find-parking')">
+                        <button class="btn btn-primary btn-block" onclick="navigateTo('bookings')">
                             <svg viewBox="0 0 24 24">
-                                <circle cx="11" cy="11" r="8"/>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
                             </svg>
-                            <span>Find &amp; Book Parking</span>
+                            <span>Manage All Bookings</span>
                         </button>
                         <button class="btn btn-secondary btn-block" onclick="navigateTo('parking-layout')">
                             <svg viewBox="0 0 24 24">
@@ -296,12 +289,12 @@ function renderDashboard(data) {
                             </svg>
                             <span>Inspect 20-Bay Grids</span>
                         </button>
-                        <button class="btn btn-secondary btn-block" onclick="navigateTo('bookings')">
+                        <button class="btn btn-secondary btn-block" onclick="navigateTo('admin')">
                             <svg viewBox="0 0 24 24">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                             </svg>
-                            <span>Manage All Bookings</span>
+                            <span>Transit Governance &amp; Fleet</span>
                         </button>
                     </div>
                 </div>

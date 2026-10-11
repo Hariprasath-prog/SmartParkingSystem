@@ -22,12 +22,59 @@ let countdownIntervals = [];
 // DOM READY
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
+    if (typeof Auth !== 'undefined' && typeof Auth.setupPortalAuth === 'function') {
+        Auth.setupPortalAuth();
+    }
     initNavigation();
     initMobileSidebar();
     initToastSystem();
-    navigateTo('dashboard');
+
+    let initialPage = (window.location.hash && window.location.hash.length > 1)
+        ? window.location.hash.substring(1)
+        : ((typeof Auth !== 'undefined' && Auth.isAdmin()) ? 'dashboard' : 'find-parking');
+
+    if (typeof Auth !== 'undefined') {
+        if (!Auth.isAdmin()) {
+            if (initialPage === 'dashboard' || initialPage === 'admin') {
+                initialPage = 'find-parking';
+                window.location.hash = '#find-parking';
+            }
+        } else {
+            if (initialPage === 'find-parking') {
+                initialPage = 'dashboard';
+                window.location.hash = '#dashboard';
+            }
+        }
+    }
+
+    navigateTo(initialPage);
     startTimeRefresh();
     startLiveRealTimeClock();
+
+    window.addEventListener('hashchange', () => {
+        let hashPage = (window.location.hash && window.location.hash.length > 1)
+            ? window.location.hash.substring(1)
+            : ((typeof Auth !== 'undefined' && Auth.isAdmin()) ? 'dashboard' : 'find-parking');
+
+        if (typeof Auth !== 'undefined') {
+            if (!Auth.isAdmin()) {
+                if (hashPage === 'dashboard' || hashPage === 'admin') {
+                    hashPage = 'find-parking';
+                    window.location.hash = '#find-parking';
+                    return;
+                }
+            } else {
+                if (hashPage === 'find-parking') {
+                    hashPage = 'dashboard';
+                    window.location.hash = '#dashboard';
+                    return;
+                }
+            }
+        }
+        if (hashPage !== currentPage) {
+            navigateTo(hashPage);
+        }
+    });
 });
 
 // ============================================================
@@ -37,16 +84,38 @@ document.addEventListener('DOMContentLoaded', () => {
 function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item[data-page]');
     navItems.forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
             const page = item.getAttribute('data-page');
             navigateTo(page);
-            // Close mobile sidebar
             closeMobileSidebar();
         });
     });
 }
 
 function navigateTo(pageName) {
+    // Role guard: restrict admin page to administrators only
+    if (pageName === 'admin' && typeof Auth !== 'undefined' && !Auth.isAdmin()) {
+        if (typeof showToast === 'function') {
+            showToast('Access restricted to municipal administrators.', 'warning');
+        }
+        pageName = 'find-parking';
+    }
+
+    // Role guard: users do not need the live dashboard; redirect to find-parking
+    if (pageName === 'dashboard' && typeof Auth !== 'undefined' && !Auth.isAdmin()) {
+        pageName = 'find-parking';
+    }
+
+    // Role guard: admins do not need citizen booking search form
+    if (pageName === 'find-parking' && typeof Auth !== 'undefined' && Auth.isAdmin()) {
+        pageName = 'dashboard';
+    }
+
+    if (window.location.hash !== '#' + pageName) {
+        history.replaceState(null, '', '#' + pageName);
+    }
+
     // Deactivate all pages
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -62,12 +131,16 @@ function navigateTo(pageName) {
     if (navItem) navItem.classList.add('active');
 
     // Update header breadcrumb
+    const isAdmin = typeof Auth !== 'undefined' && Auth.isAdmin();
     const pageNames = {
-        dashboard:        { title: 'Dashboard',              subtitle: 'Idam Nagar Smart Parking Overview' },
+        dashboard:        { title: 'Live Dashboard',         subtitle: 'Idam Nagar Commercial District Transit Authority' },
         'find-parking':   { title: 'Find Parking',           subtitle: 'Search and book available parking spaces' },
-        'parking-layout': { title: 'Parking Layout',         subtitle: 'Visual map of all parking slots' },
-        bookings:         { title: 'My Bookings',            subtitle: 'View and manage your reservations' },
-        admin:            { title: 'Admin Panel',            subtitle: 'Manage parking lots and reservations' },
+        'parking-layout': { title: 'Parking Bay Grid',       subtitle: 'Visual layout of all 60 physical parking bays' },
+        bookings:         {
+            title: isAdmin ? 'Bookings' : 'My Bookings',
+            subtitle: isAdmin ? 'Municipal Bookings Directory — Managing all reservations across Idam Nagar' : 'View and manage your reservations'
+        },
+        admin:            { title: 'Transit Management',     subtitle: 'Facility governance, fleet monitoring, and waiting queue' },
     };
 
     const info = pageNames[pageName] || { title: pageName, subtitle: '' };
@@ -163,6 +236,13 @@ function updateLiveClockDisplays() {
     const sidebarTimeEl = document.getElementById('sidebar-current-time');
     if (sidebarTimeEl) sidebarTimeEl.textContent = `${hours12}:${minutes}:${seconds} ${ampm}`;
 
+    // Automatically synchronize the network simulated clock display with current time
+    const simTimeEl = document.getElementById('sim-time-display');
+    if (simTimeEl) {
+        const h24 = String(hours).padStart(2, '0');
+        simTimeEl.textContent = `${h24}:${minutes}`;
+    }
+
     // Find Parking page current time banner (if visible)
     const fpTimeEl = document.getElementById('find-parking-current-time');
     if (fpTimeEl) fpTimeEl.textContent = timeFormatted;
@@ -185,19 +265,26 @@ function getCurrentDateIso() {
 
 async function startTimeRefresh() {
     await refreshSimulatedTime();
-    setInterval(refreshSimulatedTime, 30000); // refresh every 30s
+    setInterval(refreshSimulatedTime, 10000); // automatically sync with backend every 10s
 }
 
 async function refreshSimulatedTime() {
     try {
-        const data = await API.getSimulatedTime();
+        const now = new Date();
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+
+        // Automatically match network simulated clock with live current time
+        const data = await API.setSimulatedTime({ minutes: currentMins }).catch(() => API.getSimulatedTime());
         simulatedTime = { minutes: data.simulatedTime, formatted: data.simulatedTimeFormatted };
         const el = document.getElementById('sim-time-display');
         if (el) el.textContent = data.simulatedTimeFormatted;
     } catch (e) {
-        // Backend not connected - show placeholder
+        // Fallback to local clock
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
         const el = document.getElementById('sim-time-display');
-        if (el && el.textContent === '--:--') el.textContent = '08:00';
+        if (el) el.textContent = `${h}:${m}`;
     }
 }
 
@@ -411,6 +498,23 @@ async function quickAdvanceClock(minutes) {
         showToast('error', 'Clock Error', e.message);
     }
 }
+
+async function syncNetworkTimeToCurrentTime() {
+    try {
+        const now = new Date();
+        const mins = now.getHours() * 60 + now.getMinutes();
+        const res = await API.setSimulatedTime({ minutes: mins });
+        showToast('success', 'Clock Synchronized', `Network clock updated to current local time (${res.simulatedTimeFormatted}).`);
+        await refreshSimulatedTime();
+        if (typeof loadPageData === 'function') {
+            loadPageData(currentPage);
+        }
+        return res;
+    } catch (e) {
+        showToast('error', 'Sync Failed', e.message);
+    }
+}
+window.syncNetworkTimeToCurrentTime = syncNetworkTimeToCurrentTime;
 
 // Expose to global scope for inline event handlers
 window.navigateTo = navigateTo;

@@ -34,6 +34,10 @@ public abstract class ParkingSpace {
         return status;
     }
 
+    public void setStatus(SpaceStatus status) {
+        this.status = status;
+    }
+
     public boolean isAvailable() {
         return status == SpaceStatus.AVAILABLE;
     }
