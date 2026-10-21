@@ -50,6 +50,9 @@ public class SmartParkingServer {
         controller = new ParkingOperationsController(roadNetwork);
         SampleData.initializeSystemData(controller);
 
+        // Initialize SQLite Database schema & seed data
+        boolean dbReady = db.DatabaseManager.initializeDatabase();
+
         // Automatically match network simulated clock with live current system time
         java.time.LocalTime startTime = java.time.LocalTime.now();
         controller.setSimulatedTime(startTime.getHour() * 60 + startTime.getMinute());
@@ -96,6 +99,7 @@ public class SmartParkingServer {
         System.out.println("  Web UI URL : http://localhost:" + PORT);
         System.out.println("  REST API   : http://localhost:" + PORT + "/api");
         System.out.println("  Dashboard  : http://localhost:" + PORT + "/api/dashboard");
+        System.out.println("  Database   : " + (dbReady ? "Connected (SQLite: data/smart_parking.db)" : "In-Memory / Driver Unavailable"));
         System.out.println("  Scheduler  : Active (20-min arrival timeout + overstay detection)  ");
         System.out.println("====================================================================");
 
@@ -180,8 +184,14 @@ public class SmartParkingServer {
                     handleSetTime(exchange);
                 } else if (path.equals("/api/admin/queue") && "GET".equals(method)) {
                     handleGetQueue(exchange);
+                } else if (path.equals("/api/pricing") && "GET".equals(method)) {
+                    handleGetPricing(exchange);
+                } else if (path.equals("/api/pricing/calculate") && "GET".equals(method)) {
+                    handleCalculatePricing(exchange, parseQueryParams(query));
                 } else if (path.equals("/api/graph/nodes") && "GET".equals(method)) {
                     handleGetGraphNodes(exchange);
+                } else if (path.equals("/api/graph/nearby") && "GET".equals(method)) {
+                    handleGetNearbyGraph(exchange, parseQueryParams(query));
                 } else {
                     sendJsonResponse(exchange, 404, "{\"error\": \"Endpoint not found\", \"path\": \"" + path + "\"}");
                 }
@@ -353,6 +363,9 @@ public class SmartParkingServer {
         VehicleType type = "TWO_WHEELER".equalsIgnoreCase(vehicleType) ? VehicleType.TWO_WHEELER : VehicleType.CAR;
         Vehicle v = new Vehicle(vehicleId.trim().toUpperCase(), ownerName != null ? ownerName.trim() : "", type, accessiblePermit);
         controller.registerVehicle(v);
+        try {
+            new db.dao.VehicleDAO().saveVehicle(v);
+        } catch (Throwable ignored) {}
 
         sendJsonResponse(exchange, 200, vehicleToJson(v));
     }
@@ -439,6 +452,9 @@ public class SmartParkingServer {
 
         if (result.isSuccess() && result.getReservation() != null) {
             Reservation r = result.getReservation();
+            try {
+                new db.dao.ReservationDAO().saveReservation(r);
+            } catch (Throwable ignored) {}
             int timeoutDeadline = r.getExpiryDeadline();
             json.append(",\"reservationId\":\"").append(r.getReservationId()).append("\"");
             json.append(",\"vehicleId\":\"").append(r.getVehicle().getVehicleId()).append("\"");
@@ -459,6 +475,11 @@ public class SmartParkingServer {
             json.append(",\"status\":\"").append(r.getStatus().name()).append("\"");
             json.append(",\"travelTimeMinutes\":").append(result.getTravelTimeMinutes());
             json.append(",\"travelRoute\":\"").append(escapeJson(result.getTravelRoute())).append("\"");
+            json.append(",\"hourlyRate\":").append(r.getHourlyRate());
+            json.append(",\"durationMinutes\":").append(r.getDurationMinutes());
+            json.append(",\"totalCost\":").append(r.getTotalCost());
+            json.append(",\"formattedCost\":\"").append(r.getFormattedCost()).append("\"");
+            json.append(",\"hourlyRateFormatted\":\"").append(r.getHourlyRateFormatted()).append("\"");
         } else if (result.getQueuedRequest() != null) {
             json.append(",\"queued\":true");
             json.append(",\"requestId\":\"").append(result.getQueuedRequest().getRequestId()).append("\"");
@@ -480,6 +501,10 @@ public class SmartParkingServer {
                 .append("\"distanceKm\":").append(s.getDistanceKm()).append(",")
                 .append("\"travelRoute\":\"").append(escapeJson(s.getTravelRoute())).append("\",")
                 .append("\"availableSpaces\":").append(s.getAvailableSpaces()).append(",")
+                .append("\"hourlyRate\":").append(s.getHourlyRate()).append(",")
+                .append("\"durationMinutes\":").append(s.getDurationMinutes()).append(",")
+                .append("\"estimatedCost\":").append(s.getEstimatedCost()).append(",")
+                .append("\"formattedCost\":\"").append(s.getFormattedCost()).append("\",")
                 .append("\"sampleSpaceId\":").append(s.getSampleSpaceId() != null ? "\"" + s.getSampleSpaceId() + "\"" : "null")
                 .append("}");
         }
@@ -501,6 +526,9 @@ public class SmartParkingServer {
 
         try {
             Reservation r = controller.checkIn(reservationId, vehicleId);
+            try {
+                new db.dao.ReservationDAO().updateReservationStatus(reservationId, ReservationStatus.CHECKED_IN, controller.getCurrentSimulatedTime(), null);
+            } catch (Throwable ignored) {}
             sendJsonResponse(exchange, 200, reservationToJson(r));
         } catch (Exception e) {
             sendJsonResponse(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
@@ -526,6 +554,9 @@ public class SmartParkingServer {
     private static void handleCheckOut(HttpExchange exchange, String reservationId) throws IOException {
         try {
             Reservation r = controller.checkOut(reservationId);
+            try {
+                new db.dao.ReservationDAO().updateReservationStatus(reservationId, ReservationStatus.COMPLETED, null, controller.getCurrentSimulatedTime());
+            } catch (Throwable ignored) {}
             sendJsonResponse(exchange, 200, reservationToJson(r));
         } catch (Exception e) {
             sendJsonResponse(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
@@ -535,6 +566,9 @@ public class SmartParkingServer {
     private static void handleCancelBooking(HttpExchange exchange, String reservationId) throws IOException {
         try {
             Reservation r = controller.cancelReservation(reservationId);
+            try {
+                new db.dao.ReservationDAO().updateReservationStatus(reservationId, ReservationStatus.CANCELLED, null, null);
+            } catch (Throwable ignored) {}
             sendJsonResponse(exchange, 200, reservationToJson(r));
         } catch (Exception e) {
             sendJsonResponse(exchange, 400, "{\"success\":false,\"message\":\"" + escapeJson(e.getMessage()) + "\"}");
@@ -543,6 +577,11 @@ public class SmartParkingServer {
 
     private static void handleProcessExpired(HttpExchange exchange) throws IOException {
         List<Reservation> expired = controller.processExpiredReservations(ParkingOperationsController.DEFAULT_GRACE_PERIOD_MINUTES);
+        for (Reservation exp : expired) {
+            try {
+                new db.dao.ReservationDAO().updateReservationStatus(exp.getReservationId(), ReservationStatus.EXPIRED, null, null);
+            } catch (Throwable ignored) {}
+        }
         StringBuilder json = new StringBuilder();
         json.append("{\"success\":true,\"expiredCount\":").append(expired.size()).append(",\"expired\":[");
         for (int i = 0; i < expired.size(); i++) {
@@ -627,6 +666,10 @@ public class SmartParkingServer {
                 .append("\"distanceKm\":").append(s.getDistanceKm()).append(",")
                 .append("\"travelRoute\":\"").append(escapeJson(s.getTravelRoute())).append("\",")
                 .append("\"availableSpaces\":").append(s.getAvailableSpaces()).append(",")
+                .append("\"hourlyRate\":").append(s.getHourlyRate()).append(",")
+                .append("\"durationMinutes\":").append(s.getDurationMinutes()).append(",")
+                .append("\"estimatedCost\":").append(s.getEstimatedCost()).append(",")
+                .append("\"formattedCost\":\"").append(s.getFormattedCost()).append("\",")
                 .append("\"sampleSpaceId\":").append(s.getSampleSpaceId() != null ? "\"" + s.getSampleSpaceId() + "\"" : "null")
                 .append("}");
         }
@@ -647,6 +690,178 @@ public class SmartParkingServer {
             first = false;
         }
         json.append("]");
+        sendJsonResponse(exchange, 200, json.toString());
+    }
+
+    private static void handleGetPricing(HttpExchange exchange) throws IOException {
+        String json = "{" +
+                "\"success\":true," +
+                "\"currency\":\"₹\"," +
+                "\"rates\":{\"CAR\":50.0,\"TWO_WHEELER\":20.0}," +
+                "\"formattedRates\":{\"CAR\":\"₹50 per hour\",\"TWO_WHEELER\":\"₹20 per hour\"}," +
+                "\"minimumDurationMinutes\":30" +
+                "}";
+        sendJsonResponse(exchange, 200, json);
+    }
+
+    private static void handleCalculatePricing(HttpExchange exchange, Map<String, String> params) throws IOException {
+        String vType = params.getOrDefault("vehicleType", "CAR");
+        int startTime = parseInt(params.get("startTime"), -1);
+        int endTime = parseInt(params.get("endTime"), -1);
+        int durationMins = parseInt(params.get("durationMinutes"), -1);
+
+        if (durationMins < 0) {
+            if (startTime >= 0 && endTime >= 0 && endTime > startTime) {
+                durationMins = endTime - startTime;
+            } else {
+                durationMins = 120; // Default 2 hours
+            }
+        }
+
+        VehicleType type = "TWO_WHEELER".equalsIgnoreCase(vType) ? VehicleType.TWO_WHEELER : VehicleType.CAR;
+        double hourlyRate = ParkingOperationsController.getHourlyRate(type);
+        double totalCost = ParkingOperationsController.calculateCost(type, durationMins);
+        String formattedCost = totalCost == (long) totalCost ? "₹" + (long) totalCost : String.format("₹%.2f", totalCost);
+        String hourlyRateFormatted = "₹" + (int) hourlyRate + "/hr";
+
+        String json = "{" +
+                "\"success\":true," +
+                "\"vehicleType\":\"" + type.name() + "\"," +
+                "\"hourlyRate\":" + hourlyRate + "," +
+                "\"durationMinutes\":" + durationMins + "," +
+                "\"durationHours\":" + (Math.round((durationMins / 60.0) * 10.0) / 10.0) + "," +
+                "\"totalCost\":" + totalCost + "," +
+                "\"formattedCost\":\"" + formattedCost + "\"," +
+                "\"hourlyRateFormatted\":\"" + hourlyRateFormatted + "\"" +
+                "}";
+        sendJsonResponse(exchange, 200, json);
+    }
+
+    private static void handleGetNearbyGraph(HttpExchange exchange, Map<String, String> params) throws IOException {
+        String nodeParam = params.getOrDefault("node", params.getOrDefault("originNode", "N1")).trim().toUpperCase();
+        if (!controller.getRoadNetwork().hasNode(nodeParam)) {
+            nodeParam = "N1";
+        }
+
+        String vType = params.getOrDefault("vehicleType", "CAR");
+        boolean permit = Boolean.parseBoolean(params.getOrDefault("accessiblePermit", "false"));
+        
+        int durationMins = parseInt(params.get("durationMinutes"), -1);
+        int startTime = parseInt(params.get("startTime"), controller.getCurrentSimulatedTime());
+        int endTime = parseInt(params.get("endTime"), -1);
+        if (durationMins > 0 && endTime <= startTime) {
+            endTime = startTime + durationMins;
+        } else if (endTime > startTime) {
+            durationMins = endTime - startTime;
+        } else {
+            durationMins = 120;
+            endTime = startTime + 120;
+        }
+
+        VehicleType type = "TWO_WHEELER".equalsIgnoreCase(vType) ? VehicleType.TWO_WHEELER : VehicleType.CAR;
+        Vehicle dummy = new Vehicle("TEMP-EXPLORER", "Driver", type, permit);
+
+        GraphNode chosenNode = controller.getRoadNetwork().getNode(nodeParam);
+        List<graph.Edge> directEdges = controller.getRoadNetwork().getNeighbors(nodeParam);
+
+        // Run Dijkstra from chosen node to all reachable nodes
+        Map<String, graph.DijkstraAlgorithm.ShortestPathResult> shortestPaths =
+                graph.DijkstraAlgorithm.computeAllShortestPaths(controller.getRoadNetwork(), nodeParam);
+
+        // Nearby parking lots with Dijkstra paths & pricing
+        List<ParkingOperationsController.NearbyLotSuggestion> suggestions =
+                controller.getNearbyLotSuggestions(nodeParam, dummy, startTime, endTime);
+
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"success\":true,");
+
+        // Selected origin node (dual aliases: node and selectedNode)
+        String nodeJson = "{" +
+                "\"id\":\"" + chosenNode.getId() + "\"," +
+                "\"nodeId\":\"" + chosenNode.getId() + "\"," +
+                "\"name\":\"" + escapeJson(chosenNode.getName()) + "\"" +
+                "}";
+        json.append("\"node\":").append(nodeJson).append(",");
+        json.append("\"selectedNode\":").append(nodeJson).append(",");
+
+        // Direct 1-hop neighbors (dual aliases: connectedNeighbors and neighbors)
+        StringBuilder neighborsJson = new StringBuilder("[");
+        for (int i = 0; i < directEdges.size(); i++) {
+            if (i > 0) neighborsJson.append(",");
+            graph.Edge e = directEdges.get(i);
+            GraphNode target = controller.getRoadNetwork().getNode(e.getTargetNodeId());
+            String tName = target != null ? target.getName() : e.getTargetNodeId();
+            double distKm = Math.round(e.getWeight() * 0.35 * 10.0) / 10.0;
+            neighborsJson.append("{")
+                .append("\"nodeId\":\"").append(e.getTargetNodeId()).append("\",")
+                .append("\"neighborNodeId\":\"").append(e.getTargetNodeId()).append("\",")
+                .append("\"name\":\"").append(escapeJson(tName)).append("\",")
+                .append("\"roadName\":\"").append(escapeJson(tName)).append("\",")
+                .append("\"travelTimeMinutes\":").append(e.getWeight()).append(",")
+                .append("\"distanceKm\":").append(distKm)
+                .append("}");
+        }
+        neighborsJson.append("]");
+        json.append("\"connectedNeighbors\":").append(neighborsJson).append(",");
+        json.append("\"neighbors\":").append(neighborsJson).append(",");
+
+        // Reachable Parking Facilities via Dijkstra (dual aliases: nearbyLots and lots)
+        StringBuilder lotsJson = new StringBuilder("[");
+        for (int i = 0; i < suggestions.size(); i++) {
+            if (i > 0) lotsJson.append(",");
+            ParkingOperationsController.NearbyLotSuggestion s = suggestions.get(i);
+            lotsJson.append("{")
+                .append("\"lotId\":\"").append(s.getLotId()).append("\",")
+                .append("\"lotName\":\"").append(escapeJson(s.getLotName())).append("\",")
+                .append("\"locationNode\":\"").append(s.getLocationNode()).append("\",")
+                .append("\"travelTimeMinutes\":").append(s.getTravelTimeMinutes()).append(",")
+                .append("\"distanceKm\":").append(s.getDistanceKm()).append(",")
+                .append("\"travelRoute\":\"").append(escapeJson(s.getTravelRoute())).append("\",")
+                .append("\"availableSpaces\":").append(s.getAvailableSpaces()).append(",")
+                .append("\"hourlyRate\":").append(s.getHourlyRate()).append(",")
+                .append("\"hourlyRateFormatted\":\"").append(s.getHourlyRateFormatted()).append("\",")
+                .append("\"durationMinutes\":").append(s.getDurationMinutes()).append(",")
+                .append("\"estimatedCost\":").append(s.getEstimatedCost()).append(",")
+                .append("\"formattedCost\":\"").append(s.getFormattedCost()).append("\",")
+                .append("\"sampleSpaceId\":").append(s.getSampleSpaceId() != null ? "\"" + s.getSampleSpaceId() + "\"" : "null").append(",")
+                .append("\"isNearest\":").append(i == 0)
+                .append("}");
+        }
+        lotsJson.append("]");
+        json.append("\"nearbyLots\":").append(lotsJson).append(",");
+        json.append("\"lots\":").append(lotsJson).append(",");
+
+        // Best recommended shortest lot for driver
+        if (!suggestions.isEmpty()) {
+            ParkingOperationsController.NearbyLotSuggestion best = suggestions.get(0);
+            json.append("\"bestShortestLot\":{")
+                .append("\"lotId\":\"").append(best.getLotId()).append("\",")
+                .append("\"lotName\":\"").append(escapeJson(best.getLotName())).append("\",")
+                .append("\"locationNode\":\"").append(best.getLocationNode()).append("\",")
+                .append("\"travelTimeMinutes\":").append(best.getTravelTimeMinutes()).append(",")
+                .append("\"distanceKm\":").append(best.getDistanceKm()).append(",")
+                .append("\"travelRoute\":\"").append(escapeJson(best.getTravelRoute())).append("\",")
+                .append("\"availableSpaces\":").append(best.getAvailableSpaces()).append(",")
+                .append("\"formattedCost\":\"").append(best.getFormattedCost()).append("\"")
+                .append("},");
+        }
+
+        // Global pricing info for context (strictly parking space only, zero GST)
+        double rate = ParkingOperationsController.getHourlyRate(type);
+        double totalCost = ParkingOperationsController.calculateCost(type, durationMins);
+        json.append("\"pricing\":{")
+            .append("\"vehicleType\":\"").append(type.name()).append("\",")
+            .append("\"hourlyRate\":").append(rate).append(",")
+            .append("\"durationMinutes\":").append(durationMins).append(",")
+            .append("\"totalCost\":").append(totalCost).append(",")
+            .append("\"gstIncluded\":false,")
+            .append("\"taxAmount\":0.0,")
+            .append("\"formattedCost\":\"").append(totalCost == (long) totalCost ? "₹" + (long) totalCost : String.format("₹%.2f", totalCost)).append("\",")
+            .append("\"hourlyRateFormatted\":\"₹").append((int)rate).append("/hr\"")
+            .append("}");
+
+        json.append("}");
         sendJsonResponse(exchange, 200, json.toString());
     }
 
@@ -776,6 +991,11 @@ public class SmartParkingServer {
                 "\"expiryDeadline\":" + r.getExpiryDeadline() + "," +
                 "\"expiryDeadlineFormatted\":\"" + Reservation.formatTime(r.getExpiryDeadline()) + "\"," +
                 "\"status\":\"" + r.getStatus().name() + "\"," +
+                "\"hourlyRate\":" + r.getHourlyRate() + "," +
+                "\"durationMinutes\":" + r.getDurationMinutes() + "," +
+                "\"totalCost\":" + r.getTotalCost() + "," +
+                "\"formattedCost\":\"" + r.getFormattedCost() + "\"," +
+                "\"hourlyRateFormatted\":\"" + r.getHourlyRateFormatted() + "\"," +
                 "\"isActive\":" + r.isActiveSlot() + "," +
                 "\"createdAt\":" + r.getCreatedAt() + "," +
                 "\"createdAtFormatted\":\"" + Reservation.formatTime(r.getCreatedAt()) + "\"" +

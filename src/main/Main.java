@@ -35,6 +35,9 @@ public class Main {
         controller = new ParkingOperationsController(roadNetwork);
         SampleData.initializeSystemData(controller);
 
+        // Initialize SQLite Database schema & seed data
+        db.DatabaseManager.initializeDatabase();
+
         System.out.println("====================================================================");
         System.out.println("   SMART PARKING ALLOCATION SYSTEM - IDAM NAGAR COMMERCIAL DISTRICT  ");
         System.out.println("====================================================================");

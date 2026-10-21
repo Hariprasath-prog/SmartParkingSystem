@@ -154,4 +154,6 @@ INSERT OR IGNORE INTO users (username, password_hash, full_name, role, vehicle_i
 INSERT OR IGNORE INTO system_settings (setting_key, setting_value) VALUES
 ('simulated_time_minutes', '480'),
 ('arrival_hold_minutes', '20'),
-('district_name', 'Idam Nagar Commercial District');
+('district_name', 'Idam Nagar Commercial District'),
+('car_hourly_rate', '50.0'),
+('two_wheeler_hourly_rate', '20.0');

@@ -9,6 +9,7 @@ import model.ParkingSpace;
 import model.Reservation;
 import model.ReservationStatus;
 import model.Vehicle;
+import model.VehicleType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -662,10 +663,20 @@ public class ParkingOperationsController {
         private final String travelRoute;
         private final int availableSpaces;
         private final String sampleSpaceId;
+        private final double hourlyRate;
+        private final int durationMinutes;
+        private final double estimatedCost;
 
         public NearbyLotSuggestion(String lotId, String lotName, String locationNode,
                                    int travelTimeMinutes, double distanceKm, String travelRoute,
                                    int availableSpaces, String sampleSpaceId) {
+            this(lotId, lotName, locationNode, travelTimeMinutes, distanceKm, travelRoute, availableSpaces, sampleSpaceId, 50.0, 120, 100.0);
+        }
+
+        public NearbyLotSuggestion(String lotId, String lotName, String locationNode,
+                                   int travelTimeMinutes, double distanceKm, String travelRoute,
+                                   int availableSpaces, String sampleSpaceId,
+                                   double hourlyRate, int durationMinutes, double estimatedCost) {
             this.lotId = lotId;
             this.lotName = lotName;
             this.locationNode = locationNode;
@@ -674,6 +685,9 @@ public class ParkingOperationsController {
             this.travelRoute = travelRoute;
             this.availableSpaces = availableSpaces;
             this.sampleSpaceId = sampleSpaceId;
+            this.hourlyRate = hourlyRate;
+            this.durationMinutes = durationMinutes;
+            this.estimatedCost = estimatedCost;
         }
 
         public String getLotId() { return lotId; }
@@ -684,11 +698,34 @@ public class ParkingOperationsController {
         public String getTravelRoute() { return travelRoute; }
         public int getAvailableSpaces() { return availableSpaces; }
         public String getSampleSpaceId() { return sampleSpaceId; }
+        public double getHourlyRate() { return hourlyRate; }
+        public int getDurationMinutes() { return durationMinutes; }
+        public double getEstimatedCost() { return estimatedCost; }
+        public String getFormattedCost() {
+            if (estimatedCost == (long) estimatedCost) return "₹" + (long) estimatedCost;
+            return String.format("₹%.2f", estimatedCost);
+        }
+    }
+
+    /**
+     * Pricing policy helper:
+     * Car: ₹50 per hour
+     * Two-wheeler: ₹20 per hour
+     */
+    public static double getHourlyRate(VehicleType type) {
+        return (type == VehicleType.TWO_WHEELER) ? 20.0 : 50.0;
+    }
+
+    public static double calculateCost(VehicleType type, int durationMinutes) {
+        if (durationMinutes <= 0) return 0.0;
+        double rate = getHourlyRate(type);
+        double total = (durationMinutes / 60.0) * rate;
+        return Math.round(total * 100.0) / 100.0;
     }
 
     /**
      * Evaluates all parking lots from an origin node using Dijkstra shortest paths
-     * and returns available capacity, timing, and travel route recommendations.
+     * and returns available capacity, timing, dynamic pricing, and travel route recommendations.
      */
     public List<NearbyLotSuggestion> getNearbyLotSuggestions(String originNode, Vehicle vehicle, int startTime, int endTime) {
         String origin = (originNode != null && roadNetwork.hasNode(originNode.trim().toUpperCase()))
@@ -698,6 +735,11 @@ public class ParkingOperationsController {
                 DijkstraAlgorithm.computeAllShortestPaths(roadNetwork, origin);
 
         List<NearbyLotSuggestion> suggestions = new ArrayList<>();
+
+        int durationMins = Math.max(0, endTime - startTime);
+        VehicleType vType = (vehicle != null) ? vehicle.getType() : VehicleType.CAR;
+        double rate = getHourlyRate(vType);
+        double cost = calculateCost(vType, durationMins);
 
         for (ParkingLot lot : lotMap.values()) {
             DijkstraAlgorithm.ShortestPathResult routeResult = shortestPaths.get(lot.getLocationNode());
@@ -725,7 +767,8 @@ public class ParkingOperationsController {
 
             suggestions.add(new NearbyLotSuggestion(
                     lot.getLotId(), lot.getLotName(), lot.getLocationNode(),
-                    travelTime, distKm, routeStr, availCount, sampleSpace
+                    travelTime, distKm, routeStr, availCount, sampleSpace,
+                    rate, durationMins, cost
             ));
         }
 

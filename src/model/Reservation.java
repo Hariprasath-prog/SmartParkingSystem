@@ -14,6 +14,11 @@ public class Reservation {
     private int createdAt; // Simulated request/booking time
     private int expiryDeadline; // Exact 20-minute reservation timeout deadline
 
+    // Dynamic fee fields based on vehicle type (Car: ₹50/hr, Two-wheeler: ₹20/hr)
+    private double hourlyRate;
+    private int durationMinutes;
+    private double totalCost;
+
     public Reservation(String reservationId, Vehicle vehicle, ParkingSpace space,
                        int startTime, int endTime, int createdAt) {
         this(reservationId, vehicle, space, startTime, endTime, createdAt, Math.max(createdAt, startTime) + 20);
@@ -42,6 +47,29 @@ public class Reservation {
         this.createdAt = createdAt;
         this.expiryDeadline = expiryDeadline;
         this.status = ReservationStatus.RESERVED;
+        calculateAndSetFees();
+    }
+
+    public Reservation(String reservationId, Vehicle vehicle, ParkingSpace space,
+                       int startTime, int endTime, int createdAt, int expiryDeadline,
+                       double hourlyRate, int durationMinutes, double totalCost) {
+        this(reservationId, vehicle, space, startTime, endTime, createdAt, expiryDeadline);
+        if (hourlyRate > 0) this.hourlyRate = hourlyRate;
+        if (durationMinutes > 0) this.durationMinutes = durationMinutes;
+        if (totalCost >= 0) this.totalCost = totalCost;
+    }
+
+    /**
+     * Calculates dynamic parking cost based on vehicle classification:
+     * Car: ₹50 per hour
+     * Two-wheeler: ₹20 per hour
+     */
+    public void calculateAndSetFees() {
+        VehicleType vType = (vehicle != null) ? vehicle.getType() : VehicleType.CAR;
+        this.hourlyRate = (vType == VehicleType.TWO_WHEELER) ? 20.0 : 50.0;
+        this.durationMinutes = Math.max(0, this.endTime - this.startTime);
+        double calculated = (this.durationMinutes / 60.0) * this.hourlyRate;
+        this.totalCost = Math.round(calculated * 100.0) / 100.0;
     }
 
     public String getReservationId() {
@@ -89,6 +117,45 @@ public class Reservation {
 
     public void setStatus(ReservationStatus status) {
         this.status = status;
+    }
+
+    public double getHourlyRate() {
+        if (hourlyRate <= 0) calculateAndSetFees();
+        return hourlyRate;
+    }
+
+    public void setHourlyRate(double hourlyRate) {
+        this.hourlyRate = hourlyRate;
+    }
+
+    public int getDurationMinutes() {
+        if (durationMinutes <= 0) calculateAndSetFees();
+        return durationMinutes;
+    }
+
+    public void setDurationMinutes(int durationMinutes) {
+        this.durationMinutes = durationMinutes;
+    }
+
+    public double getTotalCost() {
+        if (totalCost <= 0 && durationMinutes > 0) calculateAndSetFees();
+        return totalCost;
+    }
+
+    public void setTotalCost(double totalCost) {
+        this.totalCost = totalCost;
+    }
+
+    public String getHourlyRateFormatted() {
+        return "₹" + (int)getHourlyRate() + "/hr";
+    }
+
+    public String getFormattedCost() {
+        double cost = getTotalCost();
+        if (cost == (long) cost) {
+            return "₹" + (long) cost;
+        }
+        return String.format("₹%.2f", cost);
     }
 
     /**

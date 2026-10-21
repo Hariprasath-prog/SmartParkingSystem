@@ -72,6 +72,13 @@ public class DatabaseManager {
                     System.err.println("[DatabaseManager] Warning: sql/schema.sql not found.");
                 }
 
+                // 1b. Safe incremental migration for fee columns
+                try (Statement stmt = conn.createStatement()) {
+                    try { stmt.execute("ALTER TABLE reservations ADD COLUMN hourly_rate REAL DEFAULT 50.0;"); } catch (SQLException ignored) {}
+                    try { stmt.execute("ALTER TABLE reservations ADD COLUMN duration_minutes INTEGER DEFAULT 120;"); } catch (SQLException ignored) {}
+                    try { stmt.execute("ALTER TABLE reservations ADD COLUMN total_cost REAL DEFAULT 100.0;"); } catch (SQLException ignored) {}
+                } catch (Exception ignored) {}
+
                 // 2. Check if parking_lots table is empty, if so run seed.sql
                 boolean needsSeed = false;
                 try (Statement stmt = conn.createStatement();
@@ -98,6 +105,49 @@ public class DatabaseManager {
             }
         } catch (Exception e) {
             System.err.println("[DatabaseManager] Error initializing database: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Re-runs schema and seed scripts unconditionally (e.g. for db:reset or db:setup).
+     */
+    public static synchronized boolean reinitializeDatabase(boolean dropExisting) {
+        if (!driverAvailable) return false;
+        try {
+            File dir = new File(DB_DIR);
+            if (!dir.exists()) dir.mkdirs();
+
+            try (Connection conn = getConnection()) {
+                if (dropExisting) {
+                    try (Statement stmt = conn.createStatement()) {
+                        stmt.execute("PRAGMA foreign_keys = OFF;");
+                        String[] tables = {"reservations", "waiting_queue", "parking_spaces", "parking_lots", "road_edges", "road_nodes", "users", "vehicles", "system_settings"};
+                        for (String t : tables) {
+                            try {
+                                stmt.execute("DROP TABLE IF EXISTS " + t);
+                            } catch (SQLException ignored) {}
+                        }
+                        stmt.execute("PRAGMA foreign_keys = ON;");
+                    }
+                }
+
+                File schemaFile = locateSqlFile("sql/schema.sql");
+                if (schemaFile != null && schemaFile.exists()) {
+                    executeSqlScript(conn, schemaFile);
+                }
+
+                File seedFile = locateSqlFile("sql/seed.sql");
+                if (seedFile != null && seedFile.exists()) {
+                    executeSqlScript(conn, seedFile);
+                }
+
+                initialized = true;
+                return true;
+            }
+        } catch (Exception e) {
+            System.err.println("[DatabaseManager] Error reinitializing database: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -135,6 +185,59 @@ public class DatabaseManager {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Standalone CLI entrypoint to run the project's SQL schema and seed files directly.
+     * Usage:
+     *   java -cp "bin;lib/*" db.DatabaseManager [--reset]
+     */
+    public static void main(String[] args) {
+        boolean reset = false;
+        for (String arg : args) {
+            if ("--reset".equalsIgnoreCase(arg) || "-r".equalsIgnoreCase(arg) || "--force".equalsIgnoreCase(arg)) {
+                reset = true;
+            }
+        }
+
+        System.out.println("==========================================================================");
+        System.out.println("  IDAM NAGAR SMART PARKING SYSTEM — SQL RUNNER & MIGRATOR                ");
+        System.out.println("  Target Database: data/smart_parking.db (SQLite)                        ");
+        System.out.println("  Scripts: sql/schema.sql & sql/seed.sql                                 ");
+        System.out.println("==========================================================================\n");
+
+        if (!driverAvailable) {
+            System.err.println("[ERROR] SQLite JDBC Driver not found in classpath (lib/sqlite-jdbc-*.jar).");
+            System.exit(1);
+        }
+
+        System.out.println("Executing SQL migration and seed scripts...");
+        boolean success = reset ? reinitializeDatabase(true) : initializeDatabase();
+
+        if (success) {
+            System.out.println("\n>>> SQL SCRIPTS EXECUTED SUCCESSFULLY! <<<");
+            try (Connection conn = getConnection();
+                 Statement stmt = conn.createStatement()) {
+                System.out.println("\nDatabase Table Summary:");
+                try (ResultSet rs = stmt.executeQuery(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")) {
+                    while (rs.next()) {
+                        String table = rs.getString("name");
+                        try (Statement cntStmt = conn.createStatement();
+                             ResultSet cntRs = cntStmt.executeQuery("SELECT COUNT(*) FROM " + table)) {
+                            int count = cntRs.next() ? cntRs.getInt(1) : 0;
+                            System.out.printf("   * %-20s : %d rows%n", table, count);
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                System.err.println("Warning inspecting tables: " + e.getMessage());
+            }
+            System.out.println("\nProject is ready with SQL persistence enabled.");
+        } else {
+            System.err.println("\n[ERROR] Failed to execute SQL scripts.");
+            System.exit(1);
         }
     }
 }

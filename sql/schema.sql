@@ -85,6 +85,9 @@ CREATE TABLE IF NOT EXISTS reservations (
     created_at INTEGER NOT NULL,          -- Simulated time of creation
     expiry_deadline INTEGER NOT NULL,     -- Max(createdAt, startTime) + 20 minutes
     status VARCHAR(20) NOT NULL CHECK (status IN ('RESERVED', 'CHECKED_IN', 'OVERSTAY', 'COMPLETED', 'CANCELLED', 'EXPIRED')),
+    hourly_rate REAL NOT NULL DEFAULT 50.0,
+    duration_minutes INTEGER NOT NULL DEFAULT 120,
+    total_cost REAL NOT NULL DEFAULT 100.0,
     checked_in_at INTEGER,
     checked_out_at INTEGER,
     FOREIGN KEY (vehicle_id) REFERENCES vehicles(vehicle_id),

@@ -9,6 +9,10 @@
     "test": "java -cp \"bin;lib/*\" util.SystemTestSuite",
     "test:db": "java -cp \"bin;lib/*\" util.DatabaseTestSuite",
     "test:isolation": "node test/test_two_way_isolation.js",
+    "sql": "java -cp \"bin;lib/*\" db.DatabaseManager",
+    "db:run": "java -cp \"bin;lib/*\" db.DatabaseManager",
+    "db:setup": "java -cp \"bin;lib/*\" db.DatabaseManager",
+    "db:reset": "java -cp \"bin;lib/*\" db.DatabaseManager --reset",
     "db:view": "java -cp \"bin;lib/*\" db.DatabaseViewer",
     "console": "java -cp \"bin;lib/*\" main.Main"
   },

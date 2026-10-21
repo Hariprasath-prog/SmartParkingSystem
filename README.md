@@ -104,7 +104,39 @@ java -cp bin util.SystemTestSuite
 
 ---
 
-## 3. Key Feature Specifications
+## 3. SQL Relational Database & Seed Execution
+
+The system includes a zero-configuration SQLite database engine (`data/smart_parking.db`) backed by DDL schema (`sql/schema.sql`) and DML initial seed data (`sql/seed.sql`), with Data Access Objects (DAOs) for all models.
+
+### Execute SQL Scripts & Seed Database
+```powershell
+npm run sql
+# or
+java -cp "bin;lib/*" db.DatabaseManager
+```
+
+### Inspect Database Tables & Records
+```powershell
+npm run db:view
+# or
+java -cp "bin;lib/*" db.DatabaseViewer
+```
+
+### Run SQL & DAO Automated Integration Tests
+```powershell
+npm run test:db
+# or
+java -cp "bin;lib/*" util.DatabaseTestSuite
+```
+
+### Reset / Re-seed Database
+```powershell
+npm run db:reset
+```
+
+---
+
+## 4. Key Feature Specifications
 
 ### 20-Minute Reservation Arrival Timeout Rule
 1. When a reservation is created, the server records `createdAt` and persists `expiryDeadline = Math.max(createdAt, startTime) + 20`.

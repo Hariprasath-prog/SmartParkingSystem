@@ -295,7 +295,7 @@ function renderBookingCard(r) {
 
                     <!-- Left: Core Info -->
                     <div style="flex:1; min-width:260px">
-                        <div style="display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3)">
+                        <div style="display:flex; align-items:center; gap:var(--space-3); margin-bottom:var(--space-3); flex-wrap:wrap">
                             <div>${getVehicleTypeIcon(r.vehicleType)}</div>
                             <div>
                                 <div style="font-weight:700; font-size:var(--font-size-base); color:var(--text-main)">
@@ -303,6 +303,9 @@ function renderBookingCard(r) {
                                 </div>
                                 <div style="font-size:var(--font-size-xs); color:var(--text-muted)">${escapeHtml(r.ownerName)}</div>
                             </div>
+                            <span class="pricing-rate-pill ${r.vehicleType === 'TWO_WHEELER' ? 'bike' : 'car'}" style="font-size:0.72rem; padding:1px 7px">
+                                ${escapeHtml(r.hourlyRateFormatted || (r.vehicleType === 'TWO_WHEELER' ? '₹20/hr' : '₹50/hr'))}
+                            </span>
                             ${r.accessiblePermit ? '<span style="font-size:var(--font-size-xs); background:#ede9fe; color:#5b21b6; padding:2px 8px; border-radius:999px; font-weight:600">Accessible Permit</span>' : ''}
                             ${getStatusBadge(r.status)}
                         </div>
@@ -318,12 +321,21 @@ function renderBookingCard(r) {
                                 <span> (${escapeHtml(r.lotId)})</span>
                             </div>
                             <div style="font-size:var(--font-size-xs); color:var(--text-muted)">
-                                <span style="font-weight:600">Stall Type</span><br>
-                                ${escapeHtml(r.spaceType?.replace('_',' '))}
+                                <span style="font-weight:600">Classification &amp; Rate</span><br>
+                                <span>${r.vehicleType === 'TWO_WHEELER' ? 'Two-Wheeler' : 'Car'} (${escapeHtml(r.hourlyRateFormatted || (r.vehicleType === 'TWO_WHEELER' ? '₹20/hr' : '₹50/hr'))})</span>
                             </div>
                             <div style="font-size:var(--font-size-xs); color:var(--text-muted)">
                                 <span style="font-weight:600">Scheduled Duration</span><br>
                                 ${duration}
+                            </div>
+                            <div style="font-size:var(--font-size-xs); color:var(--text-muted)">
+                                <span style="font-weight:600">Total Parking Fee (Zero GST)</span><br>
+                                <strong style="color:#047857; font-size:0.92rem">${escapeHtml(r.formattedCost || (r.totalCost ? '₹' + Math.round(r.totalCost) : (r.vehicleType === 'TWO_WHEELER' ? '₹40' : '₹100')))}</strong>
+                                <span style="font-size:0.75rem; color:#059669; font-weight:600; margin-left:4px">• Pure Space Fee</span>
+                            </div>
+                            <div style="font-size:var(--font-size-xs); color:var(--text-muted)">
+                                <span style="font-weight:600">Stall Type</span><br>
+                                ${escapeHtml(r.spaceType?.replace('_',' '))}
                             </div>
                         </div>
                     </div>
@@ -497,6 +509,21 @@ function confirmAction(action, reservationId, vehicleId) {
     const info = labels[action];
     if (!info) return;
 
+    const resObj = (allBookings || []).find(b => b.reservationId === reservationId);
+    const feeRowHtml = resObj ? `
+        <div style="background:var(--bg-muted);border:1px solid var(--border-light);border-radius:6px;padding:8px 12px;margin:10px 0;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+                <span>Tariff (${resObj.vehicleType === 'TWO_WHEELER' ? '🏍️ Two-Wheeler' : '🚗 Car'}): </span>
+                <strong>${escapeHtml(resObj.hourlyRateFormatted || (resObj.vehicleType === 'TWO_WHEELER' ? '₹20/hr' : '₹50/hr'))}</strong>
+            </div>
+            <div>
+                <span>Total Parking Fee: </span>
+                <strong style="color:#047857;font-size:0.92rem">${escapeHtml(resObj.formattedCost || (resObj.totalCost ? '₹' + Math.round(resObj.totalCost) : '₹100'))}</strong>
+                <span style="font-size:0.72rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:4px">Zero GST</span>
+            </div>
+        </div>
+    ` : '';
+
     document.getElementById('action-modal-title').textContent = info.title;
     document.getElementById('action-modal-body').innerHTML = `
         <div style="display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.25rem">
@@ -508,6 +535,7 @@ function confirmAction(action, reservationId, vehicleId) {
                 <div style="font-size:var(--font-size-xs);color:var(--text-muted)">
                     Reservation Reference: <code style="font-weight:700">${escapeHtml(reservationId)}</code>
                 </div>
+                ${feeRowHtml}
             </div>
         </div>
         <div id="action-modal-result"></div>

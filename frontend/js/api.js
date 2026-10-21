@@ -266,6 +266,41 @@ const API = {
      * Returns the 9 road network nodes (N1–N9) of Idam Nagar.
      */
     getGraphNodes: () => apiFetch('/graph/nodes'),
+
+    /**
+     * GET /api/graph/nearby?node=&vehicleType=&startTime=&endTime=
+     * Returns the selected single node, its direct road connections,
+     * and Dijkstra shortest paths & pricing to all parking lots.
+     */
+    getNearbyGraph: (nodeId = 'N1', vehicleType = 'CAR', durationOrStart = 120, endTime = undefined) => {
+        const params = new URLSearchParams();
+        params.set('node', nodeId);
+        if (vehicleType) params.set('vehicleType', vehicleType);
+        if (endTime !== undefined) {
+            params.set('startTime', durationOrStart);
+            params.set('endTime', endTime);
+            const diff = endTime - durationOrStart;
+            if (diff > 0) params.set('durationMinutes', diff);
+        } else if (durationOrStart !== undefined) {
+            params.set('durationMinutes', durationOrStart);
+        }
+        return apiFetch(`/graph/nearby?${params.toString()}`);
+    },
+
+    /**
+     * GET /api/pricing
+     * Returns the standard dynamic pricing rates (Car: ₹50/hr, Two-wheeler: ₹20/hr).
+     */
+    getPricing: () => apiFetch('/pricing'),
+
+    /**
+     * GET /api/pricing/calculate?vehicleType=&startTime=&endTime=&durationMinutes=
+     * Calculates validated parking fee from the backend.
+     */
+    calculatePricing: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return apiFetch(`/pricing/calculate?${query}`);
+    },
 };
 
 // ============================================================
@@ -346,6 +381,69 @@ function getRemainingTime(endMinutes, currentSimMinutes) {
     return { text, status: 'active' };
 }
 
+/**
+ * Returns the hourly tariff rate for a vehicle type.
+ * Car: ₹50 per hour
+ * Two-wheeler: ₹20 per hour
+ * @param {string} vehicleType 'CAR' | 'TWO_WHEELER'
+ * @returns {number} hourly rate in INR
+ */
+function getHourlyRate(vehicleType) {
+    return (vehicleType === 'TWO_WHEELER') ? 20 : 50;
+}
+
+/**
+ * Formats a currency amount into Indian Rupee format (₹).
+ * @param {number} amount
+ * @returns {string} e.g. "₹50" or "₹75.50"
+ */
+function formatCurrency(amount) {
+    if (amount === undefined || amount === null || isNaN(amount)) return '₹0';
+    if (amount % 1 === 0) return `₹${amount}`;
+    return `₹${Number(amount).toFixed(2)}`;
+}
+
+/**
+ * Computes parking fee details given vehicle type, start minutes, and end minutes.
+ * @param {string} vehicleType
+ * @param {number} startMinutes
+ * @param {number} endMinutes
+ * @returns {{ rate: number, durationMins: number, durationFormatted: string, cost: number, costFormatted: string }}
+ */
+function calculateParkingFee(vehicleType, startOrDuration, maybeEnd) {
+    const rate = getHourlyRate(vehicleType);
+    let durationMins = 0;
+    if (maybeEnd !== undefined) {
+        let diff = maybeEnd - startOrDuration;
+        if (diff < 0) diff += 1440;
+        durationMins = Math.max(0, diff);
+    } else {
+        durationMins = Math.max(0, Number(startOrDuration) || 0);
+    }
+    const hours = durationMins / 60.0;
+    const cost = Math.round(hours * rate * 100) / 100;
+    const formattedCost = (cost % 1 === 0) ? `₹${cost}` : `₹${cost.toFixed(2)}`;
+    const hoursBilled = (Math.round(hours * 10) / 10).toFixed(1);
+    const durationFormatted = `${Math.floor(durationMins / 60)}h ${durationMins % 60}m`;
+    return {
+        rate,
+        hourlyRate: rate,
+        hourlyRateFormatted: `₹${rate}/hr`,
+        durationMinutes: durationMins,
+        durationMins,
+        durationFormatted: durationMins >= 60 ? durationFormatted : `${durationMins} mins`,
+        durationHours: Math.round(hours * 10) / 10,
+        hoursBilled,
+        cost,
+        totalCost: cost,
+        costFormatted: formattedCost,
+        totalCostFormatted: formattedCost,
+        gstIncluded: false,
+        taxAmount: 0,
+        taxNote: "Pure parking space fee (Zero GST / No hidden taxes)"
+    };
+}
+
 // Export for use in other modules
 window.API = API;
 window.ApiError = ApiError;
@@ -354,3 +452,6 @@ window.minutesToTime = minutesToTime;
 window.datetimeLocalToMinutes = datetimeLocalToMinutes;
 window.formatDuration = formatDuration;
 window.getRemainingTime = getRemainingTime;
+window.getHourlyRate = getHourlyRate;
+window.formatCurrency = formatCurrency;
+window.calculateParkingFee = calculateParkingFee;

@@ -55,8 +55,8 @@ public class ReservationDAO {
         if (!DatabaseManager.isDriverAvailable() || res == null) return false;
 
         String sql = "INSERT OR REPLACE INTO reservations " +
-                     "(reservation_id, vehicle_id, space_id, lot_id, start_time, end_time, created_at, expiry_deadline, status) " +
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                     "(reservation_id, vehicle_id, space_id, lot_id, start_time, end_time, created_at, expiry_deadline, status, hourly_rate, duration_minutes, total_cost) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -70,6 +70,9 @@ public class ReservationDAO {
             ps.setInt(7, res.getCreatedAt());
             ps.setInt(8, res.getExpiryDeadline());
             ps.setString(9, res.getStatus().name());
+            ps.setDouble(10, res.getHourlyRate());
+            ps.setInt(11, res.getDurationMinutes());
+            ps.setDouble(12, res.getTotalCost());
 
             ps.executeUpdate();
             return true;
@@ -122,7 +125,7 @@ public class ReservationDAO {
         if (!DatabaseManager.isDriverAvailable()) return list;
 
         String sql = "SELECT reservation_id, vehicle_id, space_id, lot_id, start_time, end_time, " +
-                     "       created_at, expiry_deadline, status FROM reservations ORDER BY created_at DESC";
+                     "       created_at, expiry_deadline, status, hourly_rate, duration_minutes, total_cost FROM reservations ORDER BY created_at DESC";
 
         try (Connection conn = DatabaseManager.getConnection();
              Statement stmt = conn.createStatement();
@@ -149,6 +152,14 @@ public class ReservationDAO {
         int created = rs.getInt("created_at");
         int deadline = rs.getInt("expiry_deadline");
         String statusStr = rs.getString("status");
+        double hourlyRate = 50.0;
+        int durationMins = Math.max(0, end - start);
+        double totalCost = 0.0;
+        try {
+            hourlyRate = rs.getDouble("hourly_rate");
+            durationMins = rs.getInt("duration_minutes");
+            totalCost = rs.getDouble("total_cost");
+        } catch (SQLException ignored) {}
 
         Vehicle v = (vehicleMap != null) ? vehicleMap.get(vehId.toUpperCase()) : null;
         if (v == null) {
@@ -162,7 +173,7 @@ public class ReservationDAO {
 
         if (v == null || sp == null) return null;
 
-        Reservation res = new Reservation(resId, v, sp, start, end, created, deadline);
+        Reservation res = new Reservation(resId, v, sp, start, end, created, deadline, hourlyRate, durationMins, totalCost);
         try {
             res.setStatus(ReservationStatus.valueOf(statusStr));
         } catch (Exception ignored) {}
